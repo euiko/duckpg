@@ -1,0 +1,14 @@
+[package]
+name = "duckpg"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+convergence = "0.9.1"
+tokio = { version = "1.22", features = ["full"] }
+duckdb = { version = "0.6", features = ["bundled"] }
+async-trait = "0.1.58"
+convergence-arrow = "0.9.1"
+sqlparser = "0.27.0"
