@@ -1,21 +1,21 @@
 use std::sync::{Arc, Mutex};
-use async_trait::async_trait;
+use datafusion::sql::sqlparser::ast::Statement;
 use duckdb::{params, Connection, Arrow};
 use duckdb::arrow::record_batch::RecordBatch;
 use convergence::protocol::{ErrorResponse, FieldDescription, SqlState};
 use convergence::engine::{Portal, Engine};
 use convergence::protocol_ext::DataRowBatch;
-use convergence_arrow::table::record_batch_to_rows;
-use sqlparser::ast::Statement;
+use super::table::{record_batch_to_rows, schema_to_field_desc};
+use async_trait::async_trait;
 
 pub struct DuckDBPortal {
-    records: Arc<Vec<RecordBatch>>
+    records: Vec<RecordBatch>
 }
 
 #[async_trait]
 impl Portal for DuckDBPortal {
 	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
-		for arrow_batch in self.records.as_ref() {
+		for arrow_batch in &self.records {
 			record_batch_to_rows(&arrow_batch, batch)?;
 		}
 		Ok(())
@@ -29,7 +29,7 @@ pub struct DuckDBEngine {
 impl DuckDBEngine {
     pub fn new(conn: Connection) -> Self {
         Self { 
-            conn: Arc::new( Mutex::new(conn)),
+            conn: Arc::new( Mutex::new(conn) ),
         }
     }
 }
@@ -40,16 +40,24 @@ impl Engine for DuckDBEngine {
 
 	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
         let query = statement.to_string();
-        let conn = self.conn.try_lock().unwrap();
-        let stmt = conn.prepare(&query).unwrap();
-
-		// let plan = self.ctx.sql(&statement.to_string()).await.map_err(df_err_to_sql)?;
-		// schema_to_field_desc(&plan.schema().clone().into())
-        Err(ErrorResponse { sql_state: (), severity: (), message: () })
+		println!("prepare {}", query);
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&query).unwrap();
+		println!("statement prepared");
+		// execute the query
+		stmt.raw_execute();
+		let field_desc = schema_to_field_desc(&stmt.schema().clone())?;
+		println!("field desc len {}", field_desc.len());
+		Ok(field_desc)
 	}
 
 	async fn create_portal(&mut self, statement: &Statement) -> Result<Self::PortalType, ErrorResponse> {
-		// let df = self.ctx.sql(&statement.to_string()).await.map_err(df_err_to_sql)?;
-		// Ok(DataFusionPortal { df })
+		let query = statement.to_string();
+		println!("create_portal {}", query);
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(&query).unwrap();
+		let records: Vec<RecordBatch> = stmt.query_arrow([]).unwrap().collect();
+		println!("records len {}", records.len());
+		Ok(DuckDBPortal { records })
 	}
 }
