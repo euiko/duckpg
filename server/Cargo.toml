@@ -1,0 +1,18 @@
+[package]
+name = "duckpg"
+version = "0.1.0"
+edition = "2021"
+authors = ["Candra Kharista <candra.kharista@gmail.com>"]
+description = "Write servers that speak PostgreSQL's wire protocol"
+license = "MIT"
+repository = "https://github.com/euiko/duckpg"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+duckdb = { git="https://github.com/euiko/duckdb-rs", branch="add-get-arrow-schemas", features = ["bundled"] }
+pg-wire = { path = "../pg-wire", version = "0.1.0" }
+sqlparser = "0.27"
+async-trait = "0.1"
+datafusion = "14"

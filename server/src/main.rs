@@ -2,7 +2,7 @@ mod convergence_duck;
 
 use std::env;
 use std::sync::Arc;
-use convergence::server::{self, BindOptions};
+use pg_wire::server::{self, BindOptions};
 use convergence_duck::duckdb::DuckDBEngine;
 use duckdb::{params, Connection, Result};
 use duckdb::arrow::record_batch::RecordBatch;

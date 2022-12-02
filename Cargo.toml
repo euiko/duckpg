@@ -1,15 +1,5 @@
-[package]
-name = "duckpg"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-tokio = { version = "1", features = ["full"] }
-duckdb = { git="https://github.com/euiko/duckdb-rs", branch="add-get-arrow-schemas", features = ["bundled"] }
-convergence = "0.9.1"
-convergence-arrow = "0.9.1"
-sqlparser = "0.27"
-async-trait = "0.1"
-datafusion = "14"
+[workspace]
+members = [
+	"server",
+	"pg-wire",
+]
