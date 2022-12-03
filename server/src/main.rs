@@ -3,13 +3,11 @@ mod pgwire_duck;
 use std::env;
 use std::sync::Arc;
 use pg_wire::server::{self, BindOptions};
-use duckdb::Connection;
 use pgwire_duck::duckdb::DuckDBEngine;
 
 
 async fn new_engine(db_path: String) -> DuckDBEngine {
-    let conn = Connection::open(db_path).unwrap();
-    DuckDBEngine::new(conn)
+    DuckDBEngine::file(db_path).unwrap()
 }
 
 #[tokio::main]

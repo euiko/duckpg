@@ -13,6 +13,5 @@ repository = "https://github.com/euiko/duckpg"
 tokio = { version = "1", features = ["full"] }
 duckdb = { git="https://github.com/euiko/duckdb-rs", branch="add-get-arrow-schemas", features = ["bundled", "r2d2"] }
 pg-wire = { path = "../pg-wire", version = "0.1.0" }
-sqlparser = "0.27"
 async-trait = "0.1"
-datafusion = "14"
+r2d2 = "0.8.10"
