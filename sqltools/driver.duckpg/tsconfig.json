@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "experimentalDecorators": true,
+    "lib": ["es6"],
+    "module": "commonjs",
+    "noEmit": true,
+    "removeComments": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "target": "esnext",
+    "outDir": "out",
+    "baseUrl": ".",
+    "paths": {
+      "pg-native": ["./node_modules/pg/lib/native", "../../node_modules/pg/lib/native"]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
