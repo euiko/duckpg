@@ -1,7 +1,7 @@
 //! Utilities for converting between DuckDB Arrow and Postgres formats.
 
 use pg_wire::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
-use pg_wire::protocol_ext::DataRowBatch;
+use pg_wire::protocol_ext::DataWriter;
 use duckdb::arrow::array::{
 	BooleanArray, Date32Array, Date64Array, Float16Array, Float32Array, Float64Array, Int16Array, Int32Array,
 	Int64Array, Int8Array, StringArray, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
@@ -26,7 +26,7 @@ macro_rules! array_val {
 }
 
 /// Writes the contents of an Arrow [RecordBatch] into a Postgres [DataRowBatch].
-pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
+pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataWriter) -> Result<(), ErrorResponse> {
 	for row_idx in 0..arrow_batch.num_rows() {
 		let mut row = pg_batch.create_row();
 		for col_idx in 0..arrow_batch.num_columns() {

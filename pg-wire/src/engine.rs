@@ -1,7 +1,7 @@
 //! Contains core interface definitions for custom SQL engines.
 
 use crate::protocol::{ErrorResponse, FieldDescription};
-use crate::protocol_ext::DataRowBatch;
+use crate::protocol_ext::DataWriter;
 use async_trait::async_trait;
 
 /// A Postgres portal. Portals represent a prepared statement with all parameters specified.
@@ -11,7 +11,7 @@ use async_trait::async_trait;
 #[async_trait]
 pub trait Portal: Send + Sync {
 	/// Fetches the contents of the portal into a [DataRowBatch].
-	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse>;
+	async fn fetch(&mut self, w: &mut DataWriter) -> Result<(), ErrorResponse>;
 }
 
 /// The engine trait is the core of the `convergence` crate, and is responsible for dispatching most SQL operations.

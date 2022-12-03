@@ -2,11 +2,8 @@
 
 use crate::engine::{Engine, Portal};
 use crate::protocol::*;
-use crate::protocol_ext::DataRowBatch;
+use crate::protocol_ext::DataWriter;
 use futures::{SinkExt, StreamExt};
-use sqlparser::ast::Statement;
-use sqlparser::dialect::PostgreSqlDialect;
-use sqlparser::parser::Parser;
 use std::collections::HashMap;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::Framed;
@@ -83,20 +80,6 @@ impl<E: Engine> Connection<E> {
 			.portals
 			.get_mut(name)
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
-	}
-
-	fn parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ErrorResponse> {
-		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)
-			.map_err(|err| ErrorResponse::error(SqlState::SYNTAX_ERROR, err.to_string()))?;
-
-		match statements.len() {
-			0 => Ok(None),
-			1 => Ok(Some(statements[0].clone())),
-			_ => Err(ErrorResponse::error(
-				SqlState::SYNTAX_ERROR,
-				"expected zero or one statements",
-			)),
-		}
 	}
 
 	async fn step(
@@ -196,11 +179,11 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Execute(exec) => match self.portal_mut(&exec.portal)? {
 						Some(bound) => {
 							let row_desc = bound.row_desc.clone();
-							let mut batch_writer = DataRowBatch::new(row_desc);
-							bound.portal.fetch(&mut batch_writer).await?;
-							let num_rows = batch_writer.num_rows();
+							let mut writer = DataWriter::new(row_desc);
+							bound.portal.fetch(&mut writer).await?;
+							let num_rows = writer.num_rows();
 
-							framed.send(batch_writer).await?;
+							framed.send(writer).await?;
 
 							framed
 								.send(CommandComplete {
@@ -220,12 +203,12 @@ impl<E: Engine> Connection<E> {
 							};
 							let mut portal = self.engine.create_portal(&query).await?;
 
-							let mut batch_writer = DataRowBatch::new(row_desc);
-							portal.fetch(&mut batch_writer).await?;
-							let num_rows = batch_writer.num_rows();
+							let mut writer = DataWriter::new(row_desc);
+							portal.fetch(&mut writer).await?;
+							let num_rows = writer.num_rows();
 
-							framed.send(batch_writer.row_desc().clone()).await?;
-							framed.send(batch_writer).await?;
+							framed.send(writer.row_desc().clone()).await?;
+							framed.send(writer).await?;
 
 							framed
 								.send(CommandComplete {

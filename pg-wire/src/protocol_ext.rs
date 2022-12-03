@@ -8,7 +8,7 @@ use tokio_util::codec::Encoder;
 /// Supports batched rows for e.g. returning portal result sets.
 ///
 /// NB: this struct only performs limited validation of column consistency across rows.
-pub struct DataRowBatch {
+pub struct DataWriter {
 	row_desc: RowDescription,
 	format_code: FormatCode,
 	num_rows: usize,
@@ -16,8 +16,8 @@ pub struct DataRowBatch {
 	row: BytesMut,
 }
 
-impl DataRowBatch {
-	/// Creates a new row batch using the given format code, requiring a certain number of columns per row.
+impl DataWriter {
+	/// Creates a new row writer using the given format code, requiring a certain number of columns per row.
 	pub fn new(row_desc: RowDescription) -> Self {
 		Self {
 			format_code: row_desc.format_code,
@@ -36,16 +36,17 @@ impl DataRowBatch {
 		DataRowWriter::new(self)
 	}
 
-	/// Returns the number of rows currently written to this batch.
+	/// Returns the number of rows currently written to this writer.
 	pub fn num_rows(&self) -> usize {
 		self.num_rows
 	}
 
+	/// Set the fields of this writer
 	pub fn set_fields(&mut self, fields: Vec<FieldDescription>) {
 		self.row_desc.fields = fields
 	}
 
-	/// Returns the RowDescription of this batch
+	/// Returns the RowDescription of this writer
 	pub fn row_desc(&self) -> &RowDescription {
 		&self.row_desc
 	}
@@ -67,14 +68,14 @@ macro_rules! primitive_write {
 	};
 }
 
-/// Temporarily leased from a [DataRowBatch] to encode a single row.
+/// Temporarily leased from a [DataWriter] to encode a single row.
 pub struct DataRowWriter<'a> {
 	current_col: usize,
-	parent: &'a mut DataRowBatch,
+	parent: &'a mut DataWriter,
 }
 
 impl<'a> DataRowWriter<'a> {
-	fn new(parent: &'a mut DataRowBatch) -> Self {
+	fn new(parent: &'a mut DataWriter) -> Self {
 		parent.row.put_i16(parent.num_cols() as i16);
 		Self { current_col: 0, parent }
 	}
@@ -159,10 +160,10 @@ impl<'a> Drop for DataRowWriter<'a> {
 	}
 }
 
-impl Encoder<DataRowBatch> for ConnectionCodec {
+impl Encoder<DataWriter> for ConnectionCodec {
 	type Error = ProtocolError;
 
-	fn encode(&mut self, item: DataRowBatch, dst: &mut BytesMut) -> Result<(), Self::Error> {
+	fn encode(&mut self, item: DataWriter, dst: &mut BytesMut) -> Result<(), Self::Error> {
 		dst.extend(item.data);
 		Ok(())
 	}

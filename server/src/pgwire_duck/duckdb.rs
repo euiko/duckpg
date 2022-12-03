@@ -3,7 +3,7 @@ use duckdb::{DuckdbConnectionManager};
 use duckdb::arrow::record_batch::RecordBatch;
 use pg_wire::protocol::{ErrorResponse, FieldDescription, SqlState};
 use pg_wire::engine::{Portal, Engine};
-use pg_wire::protocol_ext::DataRowBatch;
+use pg_wire::protocol_ext::DataWriter;
 use r2d2::Pool;
 use super::table::{record_batch_to_rows, schema_to_field_desc};
 use async_trait::async_trait;
@@ -22,10 +22,10 @@ pub struct DuckDBPortal {
 
 #[async_trait]
 impl Portal for DuckDBPortal {
-	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
-		batch.set_fields(self.fields.to_owned());
+	async fn fetch(&mut self, w: &mut DataWriter) -> Result<(), ErrorResponse> {
+		w.set_fields(self.fields.to_owned());
 		for arrow_batch in &self.records {
-			record_batch_to_rows(&arrow_batch, batch)?;
+			record_batch_to_rows(&arrow_batch, w)?;
 		}
 		Ok(())
 	}
