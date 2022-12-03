@@ -877,6 +877,7 @@ dependencies = [
  "hashlink",
  "libduckdb-sys",
  "memchr",
+ "r2d2",
  "rust_decimal",
  "smallvec",
  "strum",
@@ -1797,6 +1798,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2d2"
+version = "0.8.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51de85fb3fb6524929c8a2eb85e6b6d363de4e8c48f9e2c2eac4944abc181c93"
+dependencies = [
+ "log",
+ "parking_lot",
+ "scheduled-thread-pool",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1944,6 +1956,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "scheduled-thread-pool"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "977a7519bff143a44f842fd07e80ad1329295bd71686457f18e496736f4bf9bf"
+dependencies = [
+ "parking_lot",
 ]
 
 [[package]]

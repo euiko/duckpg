@@ -1,12 +1,10 @@
-mod convergence_duck;
+mod pgwire_duck;
 
 use std::env;
 use std::sync::Arc;
 use pg_wire::server::{self, BindOptions};
-use convergence_duck::duckdb::DuckDBEngine;
-use duckdb::{params, Connection, Result};
-use duckdb::arrow::record_batch::RecordBatch;
-use duckdb::arrow::util::pretty::print_batches;
+use duckdb::Connection;
+use pgwire_duck::duckdb::DuckDBEngine;
 
 
 async fn new_engine(db_path: String) -> DuckDBEngine {
