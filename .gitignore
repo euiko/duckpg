@@ -1,3 +1,7 @@
 target
 *.wal
-*.db
+
+# ignore tests database
+test.db
+test.csv
+test.parquet

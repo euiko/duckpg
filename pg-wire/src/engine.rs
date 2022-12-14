@@ -1,6 +1,6 @@
 //! Contains core interface definitions for custom SQL engines.
 
-use crate::protocol::{ErrorResponse, FieldDescription};
+use crate::protocol::{ErrorResponse, FieldDescription, Startup};
 use crate::protocol_ext::DataWriter;
 use async_trait::async_trait;
 
@@ -22,9 +22,12 @@ pub trait Engine: Send + Sync + 'static {
 	/// The [Portal] implementation used by [Engine::create_portal].
 	type PortalType: Portal;
 
+	/// Prepare the engine during Startup state of the postgresql conenection
+	async fn startup(&mut self) -> Result<(), ErrorResponse>;
+
 	/// Prepares a statement, returning a vector of field descriptions for the final statement result.
-	async fn prepare(&mut self, stmt: &String) -> Result<Vec<FieldDescription>, ErrorResponse>;
+	async fn prepare(&mut self, query: &String) -> Result<Vec<FieldDescription>, ErrorResponse>;
 
 	/// Creates a new portal for the given String.
-	async fn create_portal(&mut self, stmt: &String) -> Result<Self::PortalType, ErrorResponse>;
+	async fn create_portal(&mut self, query: &String) -> Result<Self::PortalType, ErrorResponse>;
 }
