@@ -120,7 +120,11 @@ impl<E: Engine> Connection<E> {
 					framed.send(ParameterStatus::new(param, status)).await?;
 				}
 
+				// startup the engine before ready to be queried
+				self.engine.startup().await?;
+
 				framed.send(ReadyForQuery).await?;
+
 				Ok(Some(ConnectionState::Idle))
 			}
 			ConnectionState::Idle => {
