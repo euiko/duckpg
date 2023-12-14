@@ -6,9 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tokio = { version = "1", features = ["full"] }
+duckdb = { git="https://github.com/euiko/duckdb-rs", branch="add-get-arrow-schemas", features = ["bundled"] }
 convergence = "0.9.1"
-tokio = { version = "1.22", features = ["full"] }
-duckdb = { version = "0.6", features = ["bundled"] }
-async-trait = "0.1.58"
 convergence-arrow = "0.9.1"
-sqlparser = "0.27.0"
+sqlparser = "0.27"
+async-trait = "0.1"
+datafusion = "14"
