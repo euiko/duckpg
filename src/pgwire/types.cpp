@@ -309,4 +309,36 @@ int16_t get_oid_size(Oid oid) {
     return -1;
 }
 
+const char *get_sqlstate_code(SqlState state) {
+    switch (state) {
+    case SqlState::SuccessfulCompletion:
+        return "00000";
+    case SqlState::FeatureNotSupported:
+        return "0A000";
+    case SqlState::InvalidCursorName:
+        return "34000";
+    case SqlState::ConnectionException:
+        return "08000";
+    case SqlState::InvalidSQLStatementName:
+        return "26000";
+    case SqlState::DataException:
+        return "22000";
+    case SqlState::ProtocolViolation:
+        return "08P01";
+    case SqlState::SyntaxError:
+        return "42601";
+    case SqlState::InvalidDatetimeFormat:
+        return "22007";
+    }
+}
+
+const char *get_error_severity(ErrorSeverity severity) {
+    switch (severity) {
+    case ErrorSeverity::Error:
+        return "ERROR";
+    case ErrorSeverity::Fatal:
+        return "FATAL";
+    }
+}
+
 } // namespace pgwire

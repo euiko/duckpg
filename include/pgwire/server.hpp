@@ -2,6 +2,7 @@
 
 #include <asio.hpp>
 #include <function2/function2.hpp>
+#include <optional>
 #include <pgwire/protocol.hpp>
 #include <pgwire/types.hpp>
 #include <pgwire/writer.hpp>
@@ -19,6 +20,30 @@ struct PreparedStatement {
     ExecHandler handler;
 };
 
+class SqlException : public std::exception {
+  public:
+    SqlException(std::string message, SqlState state,
+                 ErrorSeverity severity = ErrorSeverity::Error);
+
+    inline std::string const &get_message() const noexcept {
+        return error_message;
+    }
+
+    inline ErrorSeverity get_severity() const noexcept {
+        return error_severity;
+    }
+
+    inline SqlState get_sqlstate() const noexcept { return error_sqlstate; }
+
+    const char *what() const noexcept override;
+
+  private:
+    std::string message;
+    std::string error_message;
+    ErrorSeverity error_severity = ErrorSeverity::Error;
+    SqlState error_sqlstate = SqlState::ProtocolViolation;
+};
+
 using ParseHandler = std::function<PreparedStatement(std::string const &)>;
 class Session {
   public:
@@ -26,6 +51,7 @@ class Session {
     ~Session();
 
     void start(ParseHandler &&handler);
+    void process_message(ParseHandler &handler, FrontendMessagePtr msg);
 
   private:
     FrontendMessagePtr read();

@@ -138,6 +138,19 @@ struct CommandComplete : public BackendMessage {
     void encode(Buffer &b) const override;
 };
 
+struct ErrorResponse : public BackendMessage {
+    std::string message;
+    ErrorSeverity severity = ErrorSeverity::Error;
+    SqlState sql_state = SqlState::ProtocolViolation;
+
+    ErrorResponse() = default;
+    ErrorResponse(std::string message, SqlState state,
+                  ErrorSeverity severity = ErrorSeverity::Error);
+
+    BackendTag tag() const noexcept override;
+    void encode(Buffer &b) const override;
+};
+
 struct FrontendMessage {
     virtual FrontendType type() const noexcept = 0;
     virtual FrontendTag tag() const noexcept = 0;

@@ -191,4 +191,25 @@ enum class Oid : int32_t {
 
 int16_t get_oid_size(Oid oid);
 
+enum class SqlState {
+    SuccessfulCompletion,
+    FeatureNotSupported,
+    InvalidCursorName,
+    ConnectionException,
+    InvalidSQLStatementName,
+    DataException,
+    ProtocolViolation,
+    SyntaxError,
+    InvalidDatetimeFormat,
+};
+
+const char *get_sqlstate_code(SqlState state);
+
+enum class ErrorSeverity {
+    Error,
+    Fatal,
+};
+
+const char *get_error_severity(ErrorSeverity severity);
+
 } // namespace pgwire

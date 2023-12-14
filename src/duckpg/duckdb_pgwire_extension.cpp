@@ -1,3 +1,4 @@
+
 #define DUCKDB_EXTENSION_MAIN
 
 #include <duckpg/duckdb_pgwire_extension.hpp>
@@ -9,10 +10,10 @@
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 #include <atomic>
-#include <iostream>
 #include <mutex>
 #include <pgwire/server.hpp>
 #include <pgwire/types.hpp>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace duckdb {
@@ -24,17 +25,36 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
         Connection conn(db);
         pgwire::PreparedStatement stmt;
         std::unique_ptr<PreparedStatement> prepared;
+        std::optional<pgwire::SqlException> error;
+
         std::vector<std::string> column_names;
         std::vector<LogicalType> column_types;
         std::size_t column_total;
 
         try {
             prepared = conn.Prepare(query);
+            if (!prepared) {
+                throw std::runtime_error(
+                    "failed prepare query with unknown error");
+            }
+
+            if (prepared->HasError()) {
+                throw std::runtime_error(prepared->GetError());
+            }
+
             column_names = prepared->GetNames();
             column_types = prepared->GetTypes();
             column_total = prepared->ColumnCount();
         } catch (std::exception &e) {
-            return stmt;
+            // std::cout << "error occured during prepare:" << e.what()
+            //           << std::endl;
+            error = pgwire::SqlException{e.what(),
+                                         pgwire::SqlState::ConnectionException};
+        }
+
+        // rethrow error
+        if (error) {
+            throw *error;
         }
 
         stmt.fields.reserve(column_total);
@@ -107,10 +127,29 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
 
         stmt.handler = [column_total, p = std::move(prepared)](
                            pgwire::Writer &writer,
-                           pgwire::Values const &parameters) mutable noexcept {
-            auto result = p->Execute();
-            if (!result) {
-                return;
+                           pgwire::Values const &parameters) mutable {
+            std::unique_ptr<QueryResult> result;
+            std::optional<pgwire::SqlException> error;
+
+            try {
+                result = p->Execute();
+                if (!result) {
+                    throw std::runtime_error(
+                        "failed to execute query with unknown error");
+                }
+
+                if (result->HasError()) {
+                    throw std::runtime_error(result->GetError());
+                }
+
+            } catch (std::exception &e) {
+                // std::cout << "error occured during execute:" << std::endl;
+                error = pgwire::SqlException{e.what(),
+                                             pgwire::SqlState::DataException};
+            }
+
+            if (error) {
+                throw *error;
             }
 
             auto &column_types = p->GetTypes();

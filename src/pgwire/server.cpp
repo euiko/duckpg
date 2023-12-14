@@ -1,7 +1,10 @@
+#include "pgwire/types.hpp"
+#include <exception>
 #include <pgwire/protocol.hpp>
 #include <pgwire/server.hpp>
 
 #include <memory>
+#include <sstream>
 #include <unordered_map>
 
 #include <asio.hpp>
@@ -12,6 +15,28 @@
 using namespace asio;
 
 namespace pgwire {
+
+std::unordered_map<std::string, std::string> server_status = {
+    {"server_version", "14"},     {"server_encoding", "UTF-8"},
+    {"client_encoding", "UTF-8"}, {"DateStyle", "ISO"},
+    {"TimeZone", "UTC"},
+};
+
+SqlException::SqlException(std::string message, SqlState state,
+                           ErrorSeverity severity)
+    : error_message(std::move(message)), error_severity(severity),
+      error_sqlstate(state) {
+    std::stringstream ss;
+    ss << "SqlException occured with severity:"
+       << get_error_severity(error_severity)
+       << " sqlstate:" << get_sqlstate_code(error_sqlstate)
+       << " message:" << error_message;
+
+    message = ss.str();
+}
+
+const char *SqlException::what() const noexcept { return message.c_str(); }
+
 Session::Session(ip::tcp::socket &&socket)
     : _socket{std::move(socket)}, _startup_done(false), _running(false){
 
@@ -20,71 +45,82 @@ Session::~Session() = default;
 
 void Session::start(ParseHandler &&handler) {
     _running = true;
-    std::unordered_map<std::string, std::string> server_status = {
-        {"server_version", "14"},     {"server_encoding", "UTF-8"},
-        {"client_encoding", "UTF-8"}, {"DateStyle", "ISO"},
-        {"TimeZone", "UTC"},
-    };
-
     for (; _running;) {
-        auto msg = this->read();
-
-        if (msg == nullptr) {
-            continue;
-        }
-        assert(msg != nullptr);
-
-        switch (msg->type()) {
-        case FrontendType::Invalid:
-        case FrontendType::Startup:
-            this->write(encode_bytes(AuthenticationOk{}));
-
-            for (const auto &[k, v] : server_status) {
-                this->write(encode_bytes(ParameterStatus{k, v}));
+        try {
+            auto msg = this->read();
+            if (msg == nullptr) {
+                continue;
+            }
+            // assert(msg != nullptr);
+            process_message(handler, std::move(msg));
+        } catch (SqlException &e) {
+            if (e.get_severity() == ErrorSeverity::Fatal) {
+                _running = false;
+                continue;
             }
 
+            ErrorResponse error_responsse{e.get_message(), e.get_sqlstate(),
+                                          e.get_severity()};
+            this->write(encode_bytes(error_responsse));
             this->write(encode_bytes(ReadyForQuery{}));
-            break;
-        case FrontendType::SSLRequest:
-            this->write(encode_bytes(SSLResponse{}));
-            break;
-        case FrontendType::Query: {
-            auto *query = static_cast<Query *>(msg.get());
-
-            auto prepared = handler(query->query);
-            this->write(encode_bytes(RowDescription{prepared.fields}));
-
-            Writer writer{prepared.fields.size()};
-            prepared.handler(writer, {});
-            this->write(encode_bytes(writer));
-
-            this->write(encode_bytes(
-                CommandComplete{std::format("SELECT {}", writer.num_rows())}));
-
-            this->write(encode_bytes(ReadyForQuery{}));
-
-            break;
+        } catch (std::exception &e) {
+            continue;
         }
-        case FrontendType::Terminate:
-            _running = false;
-            break;
-        case FrontendType::Bind:
-        case FrontendType::Close:
-        case FrontendType::CopyFail:
-        case FrontendType::Describe:
-        case FrontendType::Execute:
-        case FrontendType::Flush:
-        case FrontendType::FunctionCall:
-        case FrontendType::Parse:
-        case FrontendType::Sync:
-        case FrontendType::GSSResponse:
-        case FrontendType::SASLResponse:
-        case FrontendType::SASLInitialResponse:
-            // std::cout << "message type still not handled, type="
-            //           << int(msg->type()) << "tag=" << char(msg->tag())
-            //           << std::endl;
-            break;
+    }
+}
+
+void Session::process_message(ParseHandler &handler, FrontendMessagePtr msg) {
+
+    switch (msg->type()) {
+    case FrontendType::Invalid:
+    case FrontendType::Startup:
+        this->write(encode_bytes(AuthenticationOk{}));
+
+        for (const auto &[k, v] : server_status) {
+            this->write(encode_bytes(ParameterStatus{k, v}));
         }
+
+        this->write(encode_bytes(ReadyForQuery{}));
+        break;
+    case FrontendType::SSLRequest:
+        this->write(encode_bytes(SSLResponse{}));
+        break;
+    case FrontendType::Query: {
+        auto *query = static_cast<Query *>(msg.get());
+
+        auto prepared = handler(query->query);
+        this->write(encode_bytes(RowDescription{prepared.fields}));
+
+        Writer writer{prepared.fields.size()};
+        prepared.handler(writer, {});
+        this->write(encode_bytes(writer));
+
+        this->write(encode_bytes(
+            CommandComplete{std::format("SELECT {}", writer.num_rows())}));
+
+        this->write(encode_bytes(ReadyForQuery{}));
+
+        break;
+    }
+    case FrontendType::Terminate:
+        _running = false;
+        break;
+    case FrontendType::Bind:
+    case FrontendType::Close:
+    case FrontendType::CopyFail:
+    case FrontendType::Describe:
+    case FrontendType::Execute:
+    case FrontendType::Flush:
+    case FrontendType::FunctionCall:
+    case FrontendType::Parse:
+    case FrontendType::Sync:
+    case FrontendType::GSSResponse:
+    case FrontendType::SASLResponse:
+    case FrontendType::SASLInitialResponse:
+        // std::cout << "message type still not handled, type="
+        //           << int(msg->type()) << "tag=" << char(msg->tag())
+        //           << std::endl;
+        break;
     }
 }
 

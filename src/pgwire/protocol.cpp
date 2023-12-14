@@ -87,6 +87,20 @@ BackendTag CommandComplete::tag() const noexcept {
 }
 void CommandComplete::encode(Buffer &b) const { b.put_string(command_tag); }
 
+ErrorResponse::ErrorResponse(std::string message, SqlState state,
+                             ErrorSeverity severity)
+    : message(std::move(message)), severity(severity), sql_state(state) {}
+
+BackendTag ErrorResponse::tag() const noexcept {
+    return BackendTag::ErrorResponse;
+}
+void ErrorResponse::encode(Buffer &b) const {
+    b.put_byte('S').put_string(get_error_severity(severity));
+    b.put_byte('C').put_string(get_sqlstate_code(sql_state));
+    b.put_byte('M').put_string(message);
+    b.put_byte(0);
+}
+
 FrontendType StartupMessage::type() const noexcept {
     return is_ssl_request ? FrontendType::SSLRequest : FrontendType::Startup;
 }

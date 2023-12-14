@@ -48,6 +48,11 @@ std::string Buffer::get_string() {
     return str;
 }
 
+Buffer &Buffer::put_byte(Byte b) {
+    _data.push_back(b);
+    return *this;
+}
+
 Buffer &Buffer::put_bytes(Bytes const &bytes) {
     return put_bytes(bytes.data(), bytes.size());
 }
@@ -59,7 +64,7 @@ Buffer &Buffer::put_bytes(Byte const *b, std::size_t size) {
     return *this;
 }
 
-Buffer &Buffer::Buffer::put_string(std::string const &v,
+Buffer &Buffer::Buffer::put_string(std::string_view const &v,
                                    bool append_null_char) {
     auto p = v.data();
     _data.reserve(v.size() + _data.size());

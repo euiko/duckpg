@@ -28,9 +28,10 @@ class Buffer {
     T get_numeric();
     std::string get_string();
 
+    Buffer &put_byte(Byte b);
     Buffer &put_bytes(Bytes const &bytes);
     Buffer &put_bytes(Byte const *b, std::size_t size);
-    Buffer &put_string(std::string const &v, bool append_null_char = true);
+    Buffer &put_string(std::string_view const &v, bool append_null_char = true);
 
     template <typename T>
     std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>,
