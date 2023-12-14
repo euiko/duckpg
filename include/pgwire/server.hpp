@@ -18,7 +18,7 @@ class Session : public std::enable_shared_from_this<Session> {
   private:
     FrontendMessagePtr read();
     FrontendMessagePtr read_startup();
-    void write(Encoder const &encoder);
+    void write(Bytes &&b);
 
   private:
     bool _running;

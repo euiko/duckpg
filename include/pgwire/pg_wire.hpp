@@ -18,6 +18,9 @@ using Bytes = std::vector<Byte>;
 using MessageTag = Byte;
 using size_t = std::size_t;
 
+struct BackendMessage;
+struct FrontendMessage;
+
 enum class FrontendType {
     Invalid,
     Startup,
@@ -102,13 +105,16 @@ class Buffer {
     Buffer(Bytes &&data);
 
     inline Bytes const &data() const { return _data; }
-    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-    T get_numeric();
 
+    Bytes take_bytes();
     size_t size() const;
     Byte const *buffer() const;
     inline Byte at(size_t n) const { return _data[_pos + n]; };
     void advance(size_t n);
+
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    T get_numeric();
+    std::string get_string();
 
     Buffer &put_bytes(Bytes const &bytes);
     Buffer &put_string(std::string const &v);
@@ -138,53 +144,50 @@ template <typename T, typename> Buffer &Buffer::put_numeric(T v) {
     return *this;
 }
 
-struct Encoder {
-    virtual ~Encoder() = default;
-    virtual Buffer encode() const = 0;
-};
+template <typename T> void encode(Buffer &b, T const &t);
+template <typename T> Bytes encode_bytes(T const &t) {
+    Buffer b;
+    encode<T>(b, t);
+    return b.take_bytes();
+}
 
 struct BackendMessage {
     virtual BackendTag tag() const noexcept = 0;
-    virtual Buffer encode() const = 0;
+    virtual void encode(Buffer &b) const = 0;
 };
 
-template <typename T> struct BackendMessageEncoder : public Encoder {
-    static_assert(std::is_base_of<BackendMessage, T>::value);
-    template <typename... Args> BackendMessageEncoder(Args &&...args);
-
-    ~BackendMessageEncoder() override = default;
-    Buffer encode() const override;
-
-    T _msg;
-};
-
-template <typename T>
-template <typename... Args>
-BackendMessageEncoder<T>::BackendMessageEncoder(Args &&...args)
-    : _msg(std::forward<Args>(args)...) {}
-
-template <typename T> Buffer BackendMessageEncoder<T>::encode() const {
-    Buffer b;
-    Buffer body = _msg.encode();
-
-    b.put_numeric<uint8_t>(uint8_t(_msg.tag()));
-    b.put_numeric<int32_t>(body.size() + sizeof(int32_t));
-    b.put_bytes(body.data());
-
-    return b;
-}
-
-struct SSLResponse : public Encoder {
+struct SSLResponse {
     bool support = false;
-
-    Buffer encode() const override;
 };
+
+template <> void encode(Buffer &b, BackendMessage const &msg);
+template <> void encode(Buffer &b, SSLResponse const &ssl_resp);
 
 struct AuthenticationOk : public BackendMessage {
-    inline BackendTag tag() const noexcept override {
-        return BackendTag::Authentication;
-    };
-    Buffer encode() const override;
+    BackendTag tag() const noexcept override;
+    void encode(Buffer &b) const override;
+};
+
+struct ParameterStatus : public BackendMessage {
+    std::string name;
+    std::string value;
+
+    ParameterStatus() = default;
+    ParameterStatus(std::string name, std::string value);
+
+    BackendTag tag() const noexcept override;
+    void encode(Buffer &b) const override;
+};
+
+struct ReadyForQuery : public BackendMessage {
+    enum Status { Idle, Block, Failed };
+    Status status = Idle;
+
+    ReadyForQuery() = default;
+    ReadyForQuery(Status status);
+
+    BackendTag tag() const noexcept override;
+    void encode(Buffer &b) const override;
 };
 
 struct FrontendMessage {
@@ -195,7 +198,7 @@ struct FrontendMessage {
 
 using FrontendMessagePtr = std::unique_ptr<FrontendMessage>;
 
-struct StartupMessage : FrontendMessage {
+struct StartupMessage : public FrontendMessage {
     bool is_ssl_request = false;
     int16_t major_version = 0;
     int16_t minor_version = 0;
@@ -203,14 +206,16 @@ struct StartupMessage : FrontendMessage {
     std::string database;
     std::string options; // deprecated
 
-    inline FrontendType type() const noexcept override {
-        return is_ssl_request ? FrontendType::SSLRequest
-                              : FrontendType::Startup;
-    }
-    inline FrontendTag tag() const noexcept override {
-        return FrontendTag::None;
-    };
+    FrontendType type() const noexcept override;
+    FrontendTag tag() const noexcept override;
+    void decode(Buffer &) override;
+};
 
+struct Query : public FrontendMessage {
+    std::string query;
+
+    FrontendType type() const noexcept override;
+    FrontendTag tag() const noexcept override;
     void decode(Buffer &) override;
 };
 

@@ -7,6 +7,11 @@ namespace pgwire {
 
 Buffer::Buffer(Bytes &&data) : _data(std::move(data)) {}
 
+Bytes Buffer::take_bytes() {
+    _pos = 0;
+    return std::move(_data);
+}
+
 const Byte *Buffer::buffer() const {
     if (_pos >= _data.size()) {
         return nullptr;
@@ -14,6 +19,7 @@ const Byte *Buffer::buffer() const {
 
     return _data.data() + _pos;
 }
+
 void Buffer::advance(size_t n) { _pos += n; }
 
 size_t Buffer::size() const {
@@ -21,6 +27,12 @@ size_t Buffer::size() const {
         return 0;
     }
     return _data.size() - _pos;
+}
+
+std::string Buffer::get_string() {
+    std::string str(reinterpret_cast<const char *>(buffer()));
+    advance(str.size() + 1);
+    return str;
 }
 
 Buffer &Buffer::put_bytes(Bytes const &bytes) {
@@ -37,22 +49,64 @@ Buffer &Buffer::Buffer::put_string(std::string const &v) {
     return *this;
 }
 
-Buffer SSLResponse::encode() const {
-    Buffer b;
-    if (support) {
+template <> void encode(Buffer &b, BackendMessage const &msg) {
+    Buffer body;
+    msg.encode(body);
+
+    b.put_numeric<uint8_t>(uint8_t(msg.tag()));
+    b.put_numeric<int32_t>(body.size() + sizeof(int32_t));
+    b.put_bytes(body.data());
+}
+
+template <> void encode(Buffer &b, SSLResponse const &ssl_resp) {
+    if (ssl_resp.support) {
         b.put_numeric<uint8_t>('S');
     } else {
         b.put_numeric<uint8_t>('N');
     }
-
-    return b;
 }
 
-Buffer AuthenticationOk::encode() const {
-    Buffer b;
-    b.put_numeric<int32_t>(0);
-    return b;
+BackendTag AuthenticationOk::tag() const noexcept {
+    return BackendTag::Authentication;
 }
+
+void AuthenticationOk::encode(Buffer &b) const { b.put_numeric<int32_t>(0); }
+
+ParameterStatus::ParameterStatus(std::string name, std::string value)
+    : name(std::move(name)), value(std::move(value)) {}
+
+BackendTag ParameterStatus::tag() const noexcept {
+    return BackendTag::ParameterStatus;
+}
+
+void ParameterStatus::encode(Buffer &b) const {
+    b.put_string(name);
+    b.put_string(value);
+}
+
+ReadyForQuery::ReadyForQuery(Status status) : status(status) {}
+
+BackendTag ReadyForQuery::tag() const noexcept {
+    return BackendTag::ReadyForQuery;
+}
+void ReadyForQuery::encode(Buffer &b) const {
+    switch (status) {
+    case Idle:
+        b.put_numeric('I');
+        break;
+    case Block:
+        b.put_numeric('T');
+        break;
+    case Failed:
+        b.put_numeric('E');
+        break;
+    }
+}
+
+FrontendType StartupMessage::type() const noexcept {
+    return is_ssl_request ? FrontendType::SSLRequest : FrontendType::Startup;
+}
+FrontendTag StartupMessage::tag() const noexcept { return FrontendTag::None; }
 
 void StartupMessage::decode(Buffer &b) {
     this->major_version = b.get_numeric<int16_t>();
@@ -95,4 +149,7 @@ void StartupMessage::decode(Buffer &b) {
     };
 }
 
+FrontendType Query::type() const noexcept { return FrontendType::Query; }
+FrontendTag Query::tag() const noexcept { return FrontendTag::Query; }
+void Query::decode(Buffer &b) { query = b.get_string(); }
 } // namespace pgwire
