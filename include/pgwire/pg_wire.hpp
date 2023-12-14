@@ -1,10 +1,11 @@
 #pragma once
 
 #include <asio.hpp>
-#include <endian/big_endian.hpp>
+#include <endian/network.hpp>
 
 #include <cinttypes>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -12,9 +13,33 @@
 
 namespace pgwire {
 
-using MessageType = uint8_t;
+using Byte = uint8_t;
+using Bytes = std::vector<Byte>;
+using MessageTag = Byte;
+using size_t = std::size_t;
 
-enum class FrontEndMessage : MessageType {
+enum class FrontendType {
+    Invalid,
+    Startup,
+    SSLRequest,
+    Bind,
+    Close,
+    CopyFail,
+    Describe,
+    Execute,
+    Flush,
+    FunctionCall,
+    Parse,
+    Query,
+    Sync,
+    Terminate,
+    GSSResponse,         // GSS, SASLInitial, SASL is using same tag
+    SASLResponse,        // GSS, SASLInitial, SASL is using same tag
+    SASLInitialResponse, // GSS, SASLInitial, SASL is using same tag
+};
+
+enum class FrontendTag : MessageTag {
+    None, // used for frontend message that has no tag e.g. Startup, SSLRequest
     Bind = 'B',
     Close = 'C',
     CopyFail = 'f',
@@ -22,27 +47,17 @@ enum class FrontEndMessage : MessageType {
     Execute = 'E',
     Flush = 'H',
     FunctionCall = 'F',
-    GSSResponse = 'p',
     Parse = 'P',
     Query = 'Q',
-    SASLInitialResponse = 'p',
-    SASLResponse = 'p',
     Sync = 'S',
-    Terminate = 'X'
+    Terminate = 'X',
+    GSSSASLResponse = 'p', // GSS, SASLInitial, SASL is using same tag
 };
 
-enum class BackEndMessage : MessageType {
-    AuthenticationOk = 'R',
-    AuthenticationKerberosV5 = 'R',
-    AuthenticationCleartextPassword = 'R',
-    AuthenticationMD5Password = 'R',
-    AuthenticationSCMCredential = 'R',
-    AuthenticationGSS = 'R',
-    AuthenticationGSSContinue = 'R',
-    AuthenticationSSPI = 'R',
-    AuthenticationSASL = 'R',
-    AuthenticationSASLContinue = 'R',
-    AuthenticationSASLFinal = 'R',
+enum class BackendTag : MessageTag {
+    Authentication = 'R', // AuthenticationOK, KerberosV5, CleartextPassword,
+                          // MD5Password, SCMCredential, GSS, GSSContinue, SSPI,
+                          // SASL, SASLContinue, SASLFinal is using same tag
     BackendKeyData = 'K',
     BindComplete = '2',
     CloseComplete = '3',
@@ -66,65 +81,137 @@ enum class BackEndMessage : MessageType {
     PortalSuspended = 's',
     ReadyForQuery = 'Z',
     RowDescription = 'T',
-
 };
 
 template <typename T> struct Writer {
     T &writer;
-    template <typename Buffer> std::size_t write(Buffer &&buffer);
-};
-
-template <typename T> struct AsyncWriter {
-    T &writer;
-    template <typename Buffer, typename Callback>
-    void write_async(Buffer &&buffer, Callback &&);
+    template <typename Buffer> size_t write(Buffer &&buffer);
 };
 
 using Socket = asio::ip::tcp::socket;
 
 template <>
 template <typename Buffer>
-std::size_t Writer<Socket>::write(Buffer &&buffer) {
+size_t Writer<Socket>::write(Buffer &&buffer) {
     return writer.write_some(std::forward<Buffer>(buffer));
 }
 
-template <>
-template <typename Buffer, typename Callback>
-void AsyncWriter<Socket>::write_async(Buffer &&buffer, Callback &&callback) {
-    return writer.write_some(std::forward<Buffer>(buffer),
-                             std::forward<Callback>(callback));
-}
-
-class Message {
+class Buffer {
   public:
-    Message(FrontEndMessage t);
-    Message(BackEndMessage t);
+    Buffer() = default;
+    Buffer(Bytes &&data);
 
-    MessageType type() const;
-    uint32_t length() const;
-    const std::vector<uint8_t> &buffer() const;
+    inline Bytes const &data() const { return _data; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    T get_numeric();
 
-    Message &put_string(std::string const &v);
+    size_t size() const;
+    Byte const *buffer() const;
+    inline Byte at(size_t n) const { return _data[_pos + n]; };
+    void advance(size_t n);
+
+    Buffer &put_bytes(Bytes const &bytes);
+    Buffer &put_string(std::string const &v);
 
     template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-    Message &put_numeric(T v);
+    Buffer &put_numeric(T v);
 
-    template <typename T> std::size_t write(Writer<T> writer);
-    template <typename T, typename Callback>
-    void write_async(AsyncWriter<T> writer, Callback &&callback);
+    template <typename T> size_t write(Writer<T> writer);
 
   private:
-    MessageType _type;
-    std::vector<uint8_t> _buffer;
+    size_t _pos = 0;
+    Bytes _data;
 };
 
-template <typename T, typename> Message &Message::put_numeric(T v) {
-    T buffer;
-    endian::big_endian::put(v, reinterpret_cast<uint8_t *>(buffer));
+template <typename T, typename> T Buffer::get_numeric() {
+    T result = endian::network::get<T>(buffer());
+    advance(sizeof(T));
+    return result;
+};
+
+template <typename T, typename> Buffer &Buffer::put_numeric(T v) {
+    T buffer = 0;
+    endian::network::put(v, reinterpret_cast<uint8_t *>(&buffer));
     auto pointer = reinterpret_cast<uint8_t *>(&buffer);
-    std::copy(pointer, pointer + sizeof(T), std::back_inserter(_buffer));
+    std::copy(pointer, pointer + sizeof(T), std::back_inserter(_data));
 
     return *this;
 }
+
+struct Encoder {
+    virtual ~Encoder() = default;
+    virtual Buffer encode() const = 0;
+};
+
+struct BackendMessage {
+    virtual BackendTag tag() const noexcept = 0;
+    virtual Buffer encode() const = 0;
+};
+
+template <typename T> struct BackendMessageEncoder : public Encoder {
+    static_assert(std::is_base_of<BackendMessage, T>::value);
+    template <typename... Args> BackendMessageEncoder(Args &&...args);
+
+    ~BackendMessageEncoder() override = default;
+    Buffer encode() const override;
+
+    T _msg;
+};
+
+template <typename T>
+template <typename... Args>
+BackendMessageEncoder<T>::BackendMessageEncoder(Args &&...args)
+    : _msg(std::forward<Args>(args)...) {}
+
+template <typename T> Buffer BackendMessageEncoder<T>::encode() const {
+    Buffer b;
+    Buffer body = _msg.encode();
+
+    b.put_numeric<uint8_t>(uint8_t(_msg.tag()));
+    b.put_numeric<int32_t>(body.size() + sizeof(int32_t));
+    b.put_bytes(body.data());
+
+    return b;
+}
+
+struct SSLResponse : public Encoder {
+    bool support = false;
+
+    Buffer encode() const override;
+};
+
+struct AuthenticationOk : public BackendMessage {
+    inline BackendTag tag() const noexcept override {
+        return BackendTag::Authentication;
+    };
+    Buffer encode() const override;
+};
+
+struct FrontendMessage {
+    virtual FrontendType type() const noexcept = 0;
+    virtual FrontendTag tag() const noexcept = 0;
+    virtual void decode(Buffer &) = 0;
+};
+
+using FrontendMessagePtr = std::unique_ptr<FrontendMessage>;
+
+struct StartupMessage : FrontendMessage {
+    bool is_ssl_request = false;
+    int16_t major_version = 0;
+    int16_t minor_version = 0;
+    std::string user;
+    std::string database;
+    std::string options; // deprecated
+
+    inline FrontendType type() const noexcept override {
+        return is_ssl_request ? FrontendType::SSLRequest
+                              : FrontendType::Startup;
+    }
+    inline FrontendTag tag() const noexcept override {
+        return FrontendTag::None;
+    };
+
+    void decode(Buffer &) override;
+};
 
 } // namespace pgwire

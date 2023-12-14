@@ -1,11 +1,12 @@
 #pragma once
 
+#include "pgwire/pg_wire.hpp"
 #include <asio.hpp>
 
 #include <memory>
 #include <optional>
 
-namespace duckpg {
+namespace pgwire {
 
 class Session : public std::enable_shared_from_this<Session> {
   public:
@@ -15,7 +16,13 @@ class Session : public std::enable_shared_from_this<Session> {
     void start();
 
   private:
+    FrontendMessagePtr read();
+    FrontendMessagePtr read_startup();
+    void write(Encoder const &encoder);
+
   private:
+    bool _running;
+    bool _startup_done;
     asio::ip::tcp::socket _socket;
 };
 
@@ -25,11 +32,10 @@ class Server {
     void start();
 
   private:
-    void async_accept();
+    void accept();
 
   private:
     asio::io_context &_io_context;
     asio::ip::tcp::acceptor _acceptor;
-    std::optional<asio::ip::tcp::socket> _socket;
 };
-} // namespace duckpg
+} // namespace pgwire
