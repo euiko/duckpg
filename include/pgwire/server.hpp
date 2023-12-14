@@ -1,6 +1,7 @@
 #pragma once
 
 #include <asio.hpp>
+#include <function2/function2.hpp>
 #include <pgwire/protocol.hpp>
 #include <pgwire/types.hpp>
 #include <pgwire/writer.hpp>
@@ -11,7 +12,7 @@ using Value = std::string;
 using Values = std::vector<Value>;
 
 using ExecHandler =
-    std::function<void(Writer &writer, Values const &arguments)>;
+    fu2::unique_function<void(Writer &writer, Values const &arguments)>;
 
 struct PreparedStatement {
     Fields fields;

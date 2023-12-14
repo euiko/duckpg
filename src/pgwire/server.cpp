@@ -1,7 +1,6 @@
 #include <pgwire/protocol.hpp>
 #include <pgwire/server.hpp>
 
-#include <iostream>
 #include <memory>
 #include <unordered_map>
 
@@ -27,7 +26,6 @@ void Session::start(ParseHandler &&handler) {
         {"TimeZone", "UTC"},
     };
 
-    std::cout << "running = " << _running << std::endl;
     for (; _running;) {
         auto msg = this->read();
 
@@ -39,7 +37,6 @@ void Session::start(ParseHandler &&handler) {
         switch (msg->type()) {
         case FrontendType::Invalid:
         case FrontendType::Startup:
-            std::cout << "received startup" << std::endl;
             this->write(encode_bytes(AuthenticationOk{}));
 
             for (const auto &[k, v] : server_status) {
@@ -49,7 +46,6 @@ void Session::start(ParseHandler &&handler) {
             this->write(encode_bytes(ReadyForQuery{}));
             break;
         case FrontendType::SSLRequest:
-            std::cout << "received SSL Request" << std::endl;
             this->write(encode_bytes(SSLResponse{}));
             break;
         case FrontendType::Query: {
@@ -84,13 +80,12 @@ void Session::start(ParseHandler &&handler) {
         case FrontendType::GSSResponse:
         case FrontendType::SASLResponse:
         case FrontendType::SASLInitialResponse:
-            std::cout << "message type still not handled, type="
-                      << int(msg->type()) << "tag=" << char(msg->tag())
-                      << std::endl;
+            // std::cout << "message type still not handled, type="
+            //           << int(msg->type()) << "tag=" << char(msg->tag())
+            //           << std::endl;
             break;
         }
     }
-    std::cout << "session ended" << std::endl;
 }
 
 static std::unordered_map<FrontendTag, std::function<FrontendMessage *()>>
@@ -122,8 +117,8 @@ FrontendMessagePtr Session::read() {
 
     auto it = sFrontendMessageRegsitry.find(FrontendTag(tag));
     if (it == sFrontendMessageRegsitry.end()) {
-        std::cout << "message tag '" << tag << "' not supported, len=" << len
-                  << std::endl;
+        // std::cout << "message tag '" << tag << "' not supported, len=" << len
+        //           << std::endl;
         return nullptr;
     }
 
@@ -175,8 +170,6 @@ void Server::accept() {
     _acceptor.accept(socket);
 
     std::thread([s = std::move(socket), this]() mutable {
-        std::cout << "is open = " << s.is_open() << std::endl;
-
         Session session(std::move(s));
         auto handler = _handler(session);
         session.start(std::move(handler));

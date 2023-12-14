@@ -5,4 +5,6 @@ add_library(pgwire STATIC
   types.cpp
   writer.cpp
 )
-target_link_libraries(pgwire PUBLIC asio endian)
+target_link_libraries(pgwire PUBLIC asio endian function2)
+
+add_library(duckpg::pgwire ALIAS pgwire)
