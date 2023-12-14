@@ -1,8 +1,9 @@
 {
-    "cmake.configureSettings": {
-        "CMAKE_TOOLCHAIN_FILE": "./3rdparty/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_MAKE_PROGRAM": "make"
-    },
-    "editor.formatOnSave": true,
-    "editor.tabSize": 2
+  "cmake.configureSettings": {
+    "CMAKE_TOOLCHAIN_FILE": "./3rdparty/vcpkg/scripts/buildsystems/vcpkg.cmake",
+    "CMAKE_MAKE_PROGRAM": "make"
+  },
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "cmake.configureOnOpen": false
 }

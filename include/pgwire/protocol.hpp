@@ -63,10 +63,14 @@ enum class BackendTag : MessageTag {
     RowDescription = 'T',
 };
 
-template <typename T> void encode(Buffer &b, T const &t);
+struct SSLResponse;
+
+void encode(Buffer &b, BackendMessage const &msg);
+void encode(Buffer &b, SSLResponse const &ssl_resp);
+
 template <typename T> Bytes encode_bytes(T const &t) {
     Buffer b;
-    encode<T>(b, t);
+    encode(b, t);
     return b.take_bytes();
 }
 
@@ -78,9 +82,6 @@ struct BackendMessage {
 struct SSLResponse {
     bool support = false;
 };
-
-template <> void encode(Buffer &b, BackendMessage const &msg);
-template <> void encode(Buffer &b, SSLResponse const &ssl_resp);
 
 struct AuthenticationOk : public BackendMessage {
     BackendTag tag() const noexcept override;
@@ -111,10 +112,30 @@ struct ReadyForQuery : public BackendMessage {
 
 struct FieldDescription {
     std::string name;
+    Oid oid;
 };
 
+using Fields = std::vector<FieldDescription>;
+
 struct RowDescription : public BackendMessage {
-    std::vector<FieldDescription> fields;
+    Fields fields;
+    FormatCode format_code;
+
+    RowDescription() = default;
+    RowDescription(Fields fields, FormatCode format_code = FormatCode::Text);
+
+    BackendTag tag() const noexcept override;
+    void encode(Buffer &b) const override;
+};
+
+struct CommandComplete : public BackendMessage {
+    std::string command_tag;
+
+    CommandComplete() = default;
+    CommandComplete(std::string command_tag);
+
+    BackendTag tag() const noexcept override;
+    void encode(Buffer &b) const override;
 };
 
 struct FrontendMessage {
@@ -141,6 +162,12 @@ struct StartupMessage : public FrontendMessage {
 struct Query : public FrontendMessage {
     std::string query;
 
+    FrontendType type() const noexcept override;
+    FrontendTag tag() const noexcept override;
+    void decode(Buffer &) override;
+};
+
+struct Terminate : public FrontendMessage {
     FrontendType type() const noexcept override;
     FrontendTag tag() const noexcept override;
     void decode(Buffer &) override;

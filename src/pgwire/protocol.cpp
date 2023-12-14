@@ -1,8 +1,10 @@
+#include "pgwire/types.hpp"
+#include <cstdint>
 #include <pgwire/protocol.hpp>
 
 namespace pgwire {
 
-template <> void encode(Buffer &b, BackendMessage const &msg) {
+void encode(Buffer &b, BackendMessage const &msg) {
     Buffer body;
     msg.encode(body);
 
@@ -11,7 +13,7 @@ template <> void encode(Buffer &b, BackendMessage const &msg) {
     b.put_bytes(body.data());
 }
 
-template <> void encode(Buffer &b, SSLResponse const &ssl_resp) {
+void encode(Buffer &b, SSLResponse const &ssl_resp) {
     if (ssl_resp.support) {
         b.put_numeric<uint8_t>('S');
     } else {
@@ -55,6 +57,35 @@ void ReadyForQuery::encode(Buffer &b) const {
         break;
     }
 }
+
+RowDescription::RowDescription(std::vector<FieldDescription> fields,
+                               FormatCode format_code)
+    : fields(std::move(fields)), format_code(format_code) {}
+
+BackendTag RowDescription::tag() const noexcept {
+    return BackendTag::RowDescription;
+}
+
+void RowDescription::encode(Buffer &b) const {
+    b.put_numeric<int16_t>(fields.size());
+    for (const auto &field : fields) {
+        b.put_string(field.name);
+        b.put_numeric<int32_t>(0);
+        b.put_numeric<int16_t>(0);
+        b.put_numeric(int32_t(field.oid));
+        b.put_numeric(get_oid_size(field.oid));
+        b.put_numeric<int32_t>(-1);
+        b.put_numeric(int16_t(format_code));
+    }
+}
+
+CommandComplete::CommandComplete(std::string command_tag)
+    : command_tag(std::move(command_tag)) {}
+
+BackendTag CommandComplete::tag() const noexcept {
+    return BackendTag::CommandComplete;
+}
+void CommandComplete::encode(Buffer &b) const { b.put_string(command_tag); }
 
 FrontendType StartupMessage::type() const noexcept {
     return is_ssl_request ? FrontendType::SSLRequest : FrontendType::Startup;
@@ -105,4 +136,11 @@ void StartupMessage::decode(Buffer &b) {
 FrontendType Query::type() const noexcept { return FrontendType::Query; }
 FrontendTag Query::tag() const noexcept { return FrontendTag::Query; }
 void Query::decode(Buffer &b) { query = b.get_string(); }
+
+FrontendType Terminate::type() const noexcept {
+    return FrontendType::Terminate;
+}
+FrontendTag Terminate::tag() const noexcept { return FrontendTag::Terminate; }
+void Terminate::decode(Buffer &b) {}
+
 } // namespace pgwire

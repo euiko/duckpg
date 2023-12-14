@@ -4,6 +4,7 @@
 
 #include <endian/network.hpp>
 #include <pgwire/types.hpp>
+#include <type_traits>
 
 namespace pgwire {
 class Buffer {
@@ -15,6 +16,10 @@ class Buffer {
 
     Bytes take_bytes();
     size_t size() const;
+
+    Bytes::const_iterator begin() const;
+    Bytes::const_iterator end() const;
+
     Byte const *buffer() const;
     inline Byte at(size_t n) const { return _data[_pos + n]; };
     void advance(size_t n);
@@ -24,14 +29,17 @@ class Buffer {
     std::string get_string();
 
     Buffer &put_bytes(Bytes const &bytes);
-    Buffer &put_string(std::string const &v);
+    Buffer &put_bytes(Byte const *b, std::size_t size);
+    Buffer &put_string(std::string const &v, bool append_null_char = true);
 
-    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-    Buffer &put_numeric(T v);
+    template <typename T>
+    std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>,
+                     Buffer &>
+    put_numeric(T v);
 
   private:
-    size_t _pos = 0;
     Bytes _data;
+    size_t _pos = 0;
 };
 
 template <typename T, typename> T Buffer::get_numeric() {
@@ -40,7 +48,9 @@ template <typename T, typename> T Buffer::get_numeric() {
     return result;
 };
 
-template <typename T, typename> Buffer &Buffer::put_numeric(T v) {
+template <typename T>
+std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, Buffer &>
+Buffer::put_numeric(T v) {
     T buffer = 0;
     endian::network::put(v, reinterpret_cast<uint8_t *>(&buffer));
     auto pointer = reinterpret_cast<uint8_t *>(&buffer);

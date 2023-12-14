@@ -3,15 +3,28 @@
 #include <asio.hpp>
 #include <pgwire/protocol.hpp>
 #include <pgwire/types.hpp>
+#include <pgwire/writer.hpp>
 
 namespace pgwire {
 
-class Session : public std::enable_shared_from_this<Session> {
+using Value = std::string;
+using Values = std::vector<Value>;
+
+using ExecHandler =
+    std::function<void(Writer &writer, Values const &arguments)>;
+
+struct PreparedStatement {
+    Fields fields;
+    ExecHandler handler;
+};
+
+using ParseHandler = std::function<PreparedStatement(std::string const &)>;
+class Session {
   public:
     Session(asio::ip::tcp::socket &&socket);
     ~Session();
 
-    void start();
+    void start(ParseHandler &&handler);
 
   private:
     FrontendMessagePtr read();
@@ -24,9 +37,12 @@ class Session : public std::enable_shared_from_this<Session> {
     asio::ip::tcp::socket _socket;
 };
 
+using Handler = std::function<ParseHandler(Session &session)>;
+
 class Server {
   public:
-    Server(asio::io_context &io_context, asio::ip::tcp::endpoint endpoint);
+    Server(asio::io_context &io_context, asio::ip::tcp::endpoint endpoint,
+           Handler &&handler);
     void start();
 
   private:
@@ -35,5 +51,6 @@ class Server {
   private:
     asio::io_context &_io_context;
     asio::ip::tcp::acceptor _acceptor;
+    Handler _handler;
 };
 } // namespace pgwire
