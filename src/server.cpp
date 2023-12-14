@@ -10,20 +10,16 @@
 using namespace boost::asio;
 
 namespace duckpg {
-Session::Session(ip::tcp::socket &&socket) : _socket(std::move(socket)){};
+Session::Session(ip::tcp::socket &&socket)
+    : _socket{std::move(socket)} {
+
+      };
 Session::~Session() = default;
 
-void Session::start() {
-    boost::asio::async_read_until(
-        _socket, _streambuf, '\n',
-        [self = shared_from_this()](boost::system::error_code error,
-                                    std::size_t bytes_transferred) {
-            std::cout << std::istream(&self->_streambuf).rdbuf();
-        });
-}
+void Session::start() {}
 
 Server::Server(io_context &io_context, ip::tcp::endpoint endpoint)
-    : _io_context(io_context), _acceptor(io_context, endpoint){};
+    : _io_context{io_context}, _acceptor{io_context, endpoint} {};
 
 void Server::start() { async_accept(); }
 

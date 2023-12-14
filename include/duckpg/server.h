@@ -5,6 +5,7 @@
 #include <optional>
 
 namespace duckpg {
+
 class Session : public std::enable_shared_from_this<Session> {
   public:
     Session(boost::asio::ip::tcp::socket &&socket);
@@ -13,8 +14,8 @@ class Session : public std::enable_shared_from_this<Session> {
     void start();
 
   private:
+  private:
     boost::asio::ip::tcp::socket _socket;
-    boost::asio::streambuf _streambuf;
 };
 
 class Server {

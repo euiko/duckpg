@@ -9,6 +9,7 @@ find_package(Boost)
 add_executable(duckpg
     src/main.cpp
     src/server.cpp
+    src/pg_wire.cpp
 )
 
 target_include_directories(duckpg PRIVATE
