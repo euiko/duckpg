@@ -1,7 +1,7 @@
 #pragma once
 
-#include <boost/asio.hpp>
-#include <boost/endian.hpp>
+#include <asio.hpp>
+#include <endian/big_endian.hpp>
 
 #include <cinttypes>
 #include <cstdint>
@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace duckpg {
+namespace pgwire {
 
 using MessageType = uint8_t;
 
@@ -80,7 +80,7 @@ template <typename T> struct AsyncWriter {
     void write_async(Buffer &&buffer, Callback &&);
 };
 
-using Socket = boost::asio::ip::tcp::socket;
+using Socket = asio::ip::tcp::socket;
 
 template <>
 template <typename Buffer>
@@ -104,8 +104,10 @@ class Message {
     uint32_t length() const;
     const std::vector<uint8_t> &buffer() const;
 
-    template <typename T, typename = std::enable_if<std::is_integral_v<T>>>
-    Message &put(T v);
+    Message &put_string(std::string const &v);
+
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    Message &put_numeric(T v);
 
     template <typename T> std::size_t write(Writer<T> writer);
     template <typename T, typename Callback>
@@ -116,20 +118,13 @@ class Message {
     std::vector<uint8_t> _buffer;
 };
 
-template <typename T, typename> Message &Message::put(T v) {
-    auto _v{boost::endian::native_to_big(v)};
-    auto pointer = reinterpret_cast<uint8_t *>(&_v);
+template <typename T, typename> Message &Message::put_numeric(T v) {
+    T buffer;
+    endian::big_endian::put(v, reinterpret_cast<uint8_t *>(buffer));
+    auto pointer = reinterpret_cast<uint8_t *>(&buffer);
     std::copy(pointer, pointer + sizeof(T), std::back_inserter(_buffer));
 
     return *this;
 }
 
-template <> inline Message &Message::put(std::string v) {
-    auto p = v.data();
-    std::copy(p, p + v.size(), std::back_inserter(_buffer));
-    _buffer.push_back('\0');
-
-    return *this;
-}
-
-} // namespace duckpg
+} // namespace pgwire

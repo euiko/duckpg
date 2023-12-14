@@ -1,9 +1,9 @@
-#include <duckpg/server.h>
+#include <pgwire/server.hpp>
 
-#include <boost/asio.hpp>
+#include <asio.hpp>
 
 int main(int argc, char **argv) {
-    using namespace boost::asio;
+    using namespace asio;
 
     io_context io_context;
     ip::tcp::endpoint endpoint(ip::tcp::v4(), 15432);

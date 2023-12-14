@@ -1,18 +1,12 @@
 cmake_minimum_required(VERSION 2.17)
-project(duckpg LANGUAGES C CXX)
+project(duckpg LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Boost)
+include(third_party/asio.cmake)
+add_subdirectory(third_party/endian)
 
-add_executable(duckpg
-    src/main.cpp
-    src/server.cpp
-    src/pg_wire.cpp
-)
-
-target_include_directories(duckpg PRIVATE
-    include
-    ${Boost_INCLUDE_DIRS}
-)
+include_directories(include)
+add_subdirectory(src/pgwire)
+add_subdirectory(src/demo)
