@@ -9,37 +9,14 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
+
+#include <pgwire/buffer.hpp>
+#include <pgwire/types.hpp>
 
 namespace pgwire {
 
-using Byte = uint8_t;
-using Bytes = std::vector<Byte>;
-using MessageTag = Byte;
-using size_t = std::size_t;
-
 struct BackendMessage;
 struct FrontendMessage;
-
-enum class FrontendType {
-    Invalid,
-    Startup,
-    SSLRequest,
-    Bind,
-    Close,
-    CopyFail,
-    Describe,
-    Execute,
-    Flush,
-    FunctionCall,
-    Parse,
-    Query,
-    Sync,
-    Terminate,
-    GSSResponse,         // GSS, SASLInitial, SASL is using same tag
-    SASLResponse,        // GSS, SASLInitial, SASL is using same tag
-    SASLInitialResponse, // GSS, SASLInitial, SASL is using same tag
-};
 
 enum class FrontendTag : MessageTag {
     None, // used for frontend message that has no tag e.g. Startup, SSLRequest
@@ -86,64 +63,6 @@ enum class BackendTag : MessageTag {
     RowDescription = 'T',
 };
 
-template <typename T> struct Writer {
-    T &writer;
-    template <typename Buffer> size_t write(Buffer &&buffer);
-};
-
-using Socket = asio::ip::tcp::socket;
-
-template <>
-template <typename Buffer>
-size_t Writer<Socket>::write(Buffer &&buffer) {
-    return writer.write_some(std::forward<Buffer>(buffer));
-}
-
-class Buffer {
-  public:
-    Buffer() = default;
-    Buffer(Bytes &&data);
-
-    inline Bytes const &data() const { return _data; }
-
-    Bytes take_bytes();
-    size_t size() const;
-    Byte const *buffer() const;
-    inline Byte at(size_t n) const { return _data[_pos + n]; };
-    void advance(size_t n);
-
-    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-    T get_numeric();
-    std::string get_string();
-
-    Buffer &put_bytes(Bytes const &bytes);
-    Buffer &put_string(std::string const &v);
-
-    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
-    Buffer &put_numeric(T v);
-
-    template <typename T> size_t write(Writer<T> writer);
-
-  private:
-    size_t _pos = 0;
-    Bytes _data;
-};
-
-template <typename T, typename> T Buffer::get_numeric() {
-    T result = endian::network::get<T>(buffer());
-    advance(sizeof(T));
-    return result;
-};
-
-template <typename T, typename> Buffer &Buffer::put_numeric(T v) {
-    T buffer = 0;
-    endian::network::put(v, reinterpret_cast<uint8_t *>(&buffer));
-    auto pointer = reinterpret_cast<uint8_t *>(&buffer);
-    std::copy(pointer, pointer + sizeof(T), std::back_inserter(_data));
-
-    return *this;
-}
-
 template <typename T> void encode(Buffer &b, T const &t);
 template <typename T> Bytes encode_bytes(T const &t) {
     Buffer b;
@@ -188,6 +107,14 @@ struct ReadyForQuery : public BackendMessage {
 
     BackendTag tag() const noexcept override;
     void encode(Buffer &b) const override;
+};
+
+struct FieldDescription {
+    std::string name;
+};
+
+struct RowDescription : public BackendMessage {
+    std::vector<FieldDescription> fields;
 };
 
 struct FrontendMessage {

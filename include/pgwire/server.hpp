@@ -1,10 +1,8 @@
 #pragma once
 
-#include "pgwire/pg_wire.hpp"
 #include <asio.hpp>
-
-#include <memory>
-#include <optional>
+#include <pgwire/protocol.hpp>
+#include <pgwire/types.hpp>
 
 namespace pgwire {
 
