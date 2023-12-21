@@ -38,6 +38,8 @@ class RowWriter {
     void write_null();
     void write_value(Byte const *b, std::size_t size);
     void write_string(std::string const &value);
+    void write_cstring(const char *v);
+    void write_bool(bool v);
     void write_int2(int16_t v);
     void write_int4(int32_t v);
     void write_int8(int64_t v);

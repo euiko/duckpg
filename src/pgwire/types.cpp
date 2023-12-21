@@ -330,6 +330,8 @@ const char *get_sqlstate_code(SqlState state) {
     case SqlState::InvalidDatetimeFormat:
         return "22007";
     }
+
+    return "";
 }
 
 const char *get_error_severity(ErrorSeverity severity) {
@@ -339,6 +341,8 @@ const char *get_error_severity(ErrorSeverity severity) {
     case ErrorSeverity::Fatal:
         return "FATAL";
     }
+
+    return "";
 }
 
 } // namespace pgwire

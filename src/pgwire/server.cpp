@@ -24,18 +24,18 @@ std::unordered_map<std::string, std::string> server_status = {
 
 SqlException::SqlException(std::string message, SqlState state,
                            ErrorSeverity severity)
-    : error_message(std::move(message)), error_severity(severity),
-      error_sqlstate(state) {
+    : _error_message(std::move(message)), _error_severity(severity),
+      _error_sqlstate(state) {
     std::stringstream ss;
     ss << "SqlException occured with severity:"
-       << get_error_severity(error_severity)
-       << " sqlstate:" << get_sqlstate_code(error_sqlstate)
-       << " message:" << error_message;
+       << get_error_severity(_error_severity)
+       << " sqlstate:" << get_sqlstate_code(_error_sqlstate)
+       << " message:" << _error_message;
 
     message = ss.str();
 }
 
-const char *SqlException::what() const noexcept { return message.c_str(); }
+const char *SqlException::what() const noexcept { return _message.c_str(); }
 
 Session::Session(ip::tcp::socket &&socket)
     : _socket{std::move(socket)}, _startup_done(false), _running(false){
@@ -64,6 +64,8 @@ void Session::start(ParseHandler &&handler) {
             this->write(encode_bytes(error_responsse));
             this->write(encode_bytes(ReadyForQuery{}));
         } catch (std::exception &e) {
+            // terminate session when unexpected exception occured
+            _running = false;
             continue;
         }
     }
