@@ -1,3 +1,4 @@
+#include "pgwire/types.hpp"
 #include <pgwire/protocol.hpp>
 #include <pgwire/writer.hpp>
 
@@ -58,6 +59,28 @@ void RowWriter::write_null() {
 
 void RowWriter::write_string(std::string const &value) {
     write_value(reinterpret_cast<Byte const *>(value.data()), value.size());
+}
+
+void RowWriter::write_cstring(const char *v) {
+    write_value(reinterpret_cast<Byte const *>(v), strlen(v));
+}
+
+void RowWriter::write_bool(bool v) {
+    switch (_writer._format_code) {
+    case FormatCode::Text:
+        if (v) {
+            write_cstring("t");
+        } else {
+            write_cstring("f");
+        }
+
+        break;
+    case FormatCode::Binary:
+        _current_col++;
+        write_numeric(_row, FormatCode::Binary, v, nullptr);
+
+        break;
+    }
 }
 
 void RowWriter::write_int2(int16_t v) {

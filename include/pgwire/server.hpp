@@ -26,22 +26,22 @@ class SqlException : public std::exception {
                  ErrorSeverity severity = ErrorSeverity::Error);
 
     inline std::string const &get_message() const noexcept {
-        return error_message;
+        return _error_message;
     }
 
     inline ErrorSeverity get_severity() const noexcept {
-        return error_severity;
+        return _error_severity;
     }
 
-    inline SqlState get_sqlstate() const noexcept { return error_sqlstate; }
+    inline SqlState get_sqlstate() const noexcept { return _error_sqlstate; }
 
     const char *what() const noexcept override;
 
   private:
-    std::string message;
-    std::string error_message;
-    ErrorSeverity error_severity = ErrorSeverity::Error;
-    SqlState error_sqlstate = SqlState::ProtocolViolation;
+    std::string _message;
+    std::string _error_message;
+    ErrorSeverity _error_severity = ErrorSeverity::Error;
+    SqlState _error_sqlstate = SqlState::ProtocolViolation;
 };
 
 using ParseHandler = std::function<PreparedStatement(std::string const &)>;

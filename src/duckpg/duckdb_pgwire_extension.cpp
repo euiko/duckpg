@@ -1,4 +1,3 @@
-
 #define DUCKDB_EXTENSION_MAIN
 
 #include <duckpg/duckdb_pgwire_extension.hpp>
@@ -46,10 +45,8 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
             column_types = prepared->GetTypes();
             column_total = prepared->ColumnCount();
         } catch (std::exception &e) {
-            // std::cout << "error occured during prepare:" << e.what()
-            //           << std::endl;
-            error = pgwire::SqlException{e.what(),
-                                         pgwire::SqlState::ConnectionException};
+            error =
+                pgwire::SqlException{e.what(), pgwire::SqlState::DataException};
         }
 
         // rethrow error
@@ -83,13 +80,15 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
             case LogicalTypeId::BIGINT:
                 oid = pgwire::Oid::Int8;
                 break;
+            case LogicalTypeId::BOOLEAN:
+                oid = pgwire::Oid::Bool;
+                break;
             case LogicalTypeId::TINYINT:
             case LogicalTypeId::INVALID:
             case LogicalTypeId::SQLNULL:
             case LogicalTypeId::UNKNOWN:
             case LogicalTypeId::ANY:
             case LogicalTypeId::USER:
-            case LogicalTypeId::BOOLEAN:
             case LogicalTypeId::DATE:
             case LogicalTypeId::TIME:
             case LogicalTypeId::TIMESTAMP_SEC:
@@ -179,6 +178,9 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
                     case LogicalTypeId::BIGINT:
                         row.write_int8(chunk.GetValue<int64_t>(i));
                         break;
+                    case LogicalTypeId::BOOLEAN:
+                        row.write_bool(chunk.GetValue<bool>(i));
+                        break;
                     default:
                         break;
                     }
@@ -206,22 +208,17 @@ static void start_server(DatabaseInstance &db) {
     io_context.run();
 }
 
-inline void QuackScalarFun(DataChunk &args, ExpressionState &state,
+inline void PgIsInRecovery(DataChunk &args, ExpressionState &state,
                            Vector &result) {
-    auto &name_vector = args.data[0];
-    UnaryExecutor::Execute<string_t, string_t>(
-        name_vector, result, args.size(), [&](string_t name) {
-            return StringVector::AddString(result,
-                                           "Quack " + name.GetString() + " 🐥");
-            ;
-        });
+    result.SetValue(0, false);
 }
 
 static void LoadInternal(DatabaseInstance &instance) {
     // Register a scalar function
-    auto quack_scalar_function = ScalarFunction(
-        "quack", {LogicalType::VARCHAR}, LogicalType::VARCHAR, QuackScalarFun);
-    ExtensionUtil::RegisterFunction(instance, quack_scalar_function);
+    auto pg_is_in_recovery_scalar_function = ScalarFunction(
+        "pg_is_in_recovery", {}, LogicalType::BOOLEAN, PgIsInRecovery);
+    ExtensionUtil::RegisterFunction(instance,
+                                    pg_is_in_recovery_scalar_function);
 
     std::thread([&instance]() mutable { start_server(instance); }).detach();
 }
