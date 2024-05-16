@@ -2,6 +2,17 @@
 
 This extension is used for experimentation of adding PostgreSQL wire protocol to the DuckDB ecosystem through an extension named `duckdb_pgwire`.
 
+## Background
+DuckDB has a very unique value that bring the power of feature rich analytical database to the local environment without any external dependency. It is originally designed to be used as an embedded in-process database just like SQLite, but faster thanks to its **columnar-vectorized query execution engine** with complex query capabilities. Read more on the [DuckDB's site](https://duckdb.org/why_duckdb).
+
+Being embedded in-process database has its own drawbacks like SQlite that once embedded it is difficult to know what happen inside the database, especially when you are start persisting data. So, in order to overcome this `DuckPG` is created. It is used to adds a PostgreSQL compatible server capabilities to the DuckDB using an extension, so you can connect to the DuckDB's database from outside the host process using PostgreSQL compatible client such as `psql`.
+
+There are some potential use case that you can try with this extension :
+- Managing in-process DuckDB from outside the process.
+- Use DuckDB from the environment that are currently not supported by running on another supported host and connect via PostgreSQL protocol.
+
+**Please note that this project is very experimental and by adding PostgreSQL compatible server means that it may contradict with the original design, try with your own risk**   
+
 The PostgreSQL wire protocol is implemented in standalone component/library named `pgwire` that heavily inspired by https://github.com/returnString/convergence and https://github.com/jeroenrinzema/psql-wire.
 
 ## Milestone
