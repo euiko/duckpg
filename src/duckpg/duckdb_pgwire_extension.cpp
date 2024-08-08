@@ -121,7 +121,8 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
                 break;
             }
 
-            stmt.fields.emplace_back(name, oid);
+            // can't uses emplace_back for POD struct in C++17
+            stmt.fields.push_back({ name, oid });
         }
 
         stmt.handler = [column_total, p = std::move(prepared)](
