@@ -1,5 +1,6 @@
 #include "pgwire/types.hpp"
 #include <cstdint>
+#include <optional>
 #include <pgwire/protocol.hpp>
 
 namespace pgwire {
