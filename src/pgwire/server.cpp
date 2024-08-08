@@ -1,11 +1,13 @@
-#include "pgwire/types.hpp"
 #include <exception>
-#include <pgwire/protocol.hpp>
-#include <pgwire/server.hpp>
-
 #include <memory>
 #include <sstream>
 #include <unordered_map>
+#include <cstdio>
+
+#include <pgwire/protocol.hpp>
+#include <pgwire/server.hpp>
+#include <pgwire/types.hpp>
+#include <pgwire/utils.hpp>
 
 #include <asio.hpp>
 #include <asio/io_context.hpp>
@@ -97,8 +99,9 @@ void Session::process_message(ParseHandler &handler, FrontendMessagePtr msg) {
         prepared.handler(writer, {});
         this->write(encode_bytes(writer));
 
-        this->write(encode_bytes(
-            CommandComplete{std::format("SELECT {}", writer.num_rows())}));
+        this->write(encode_bytes(CommandComplete{
+            string_format("SELECT %lu", writer.num_rows())
+        }));
 
         this->write(encode_bytes(ReadyForQuery{}));
 
@@ -207,6 +210,7 @@ void Server::accept() {
     ip::tcp::socket socket(_io_context);
     _acceptor.accept(socket);
 
+    // TODO: manage the connection
     std::thread([s = std::move(socket), this]() mutable {
         Session session(std::move(s));
         auto handler = _handler(session);
