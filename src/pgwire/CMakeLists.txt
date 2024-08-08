@@ -1,8 +1,9 @@
-add_library(pgwire STATIC 
+add_library(pgwire STATIC
   buffer.cpp
   protocol.cpp
   server.cpp
   types.cpp
+  utils.cpp
   writer.cpp
 )
 target_link_libraries(pgwire PUBLIC asio endian function2)
