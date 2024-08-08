@@ -210,6 +210,7 @@ void Server::accept() {
     ip::tcp::socket socket(_io_context);
     _acceptor.accept(socket);
 
+    // TODO: manage the connection
     std::thread([s = std::move(socket), this]() mutable {
         Session session(std::move(s));
         auto handler = _handler(session);
