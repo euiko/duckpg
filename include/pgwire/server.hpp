@@ -2,7 +2,8 @@
 
 #include <asio.hpp>
 #include <function2/function2.hpp>
-#include <optional>
+
+#include <pgwire/io.hpp>
 #include <pgwire/protocol.hpp>
 #include <pgwire/types.hpp>
 #include <pgwire/writer.hpp>
@@ -51,12 +52,12 @@ class Session {
     ~Session();
 
     void start(ParseHandler &&handler);
-    void process_message(ParseHandler &handler, FrontendMessagePtr msg);
+    Promise process_message(ParseHandler &handler, FrontendMessagePtr msg);
 
   private:
     FrontendMessagePtr read();
     FrontendMessagePtr read_startup();
-    void write(Bytes &&b);
+    Promise write(Bytes &&b);
 
   private:
     bool _running;
@@ -66,18 +67,22 @@ class Session {
 
 using Handler = std::function<ParseHandler(Session &session)>;
 
+class ServerImpl;
+
 class Server {
   public:
     Server(asio::io_context &io_context, asio::ip::tcp::endpoint endpoint,
            Handler &&handler);
+    ~Server();
     void start();
 
   private:
-    void accept();
+    friend class ServerImpl;
 
   private:
     asio::io_context &_io_context;
     asio::ip::tcp::acceptor _acceptor;
     Handler _handler;
+    std::unique_ptr<ServerImpl> _impl;
 };
 } // namespace pgwire

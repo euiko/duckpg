@@ -1,8 +1,11 @@
+#include "pgwire/io.hpp"
+#include <chrono>
+#include <cstdio>
 #include <exception>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
-#include <cstdio>
 
 #include <pgwire/protocol.hpp>
 #include <pgwire/server.hpp>
@@ -13,10 +16,18 @@
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
 #include <endian/network.hpp>
-
-using namespace asio;
+#include <promise-cpp/promise.hpp>
 
 namespace pgwire {
+
+class ServerImpl {
+  public:
+    explicit ServerImpl(Server &server);
+    void do_accept();
+
+  private:
+    Server &_server;
+};
 
 std::unordered_map<std::string, std::string> server_status = {
     {"server_version", "14"},     {"server_encoding", "UTF-8"},
@@ -39,10 +50,10 @@ SqlException::SqlException(std::string message, SqlState state,
 
 const char *SqlException::what() const noexcept { return _message.c_str(); }
 
-Session::Session(ip::tcp::socket &&socket)
-    : _socket{std::move(socket)}, _startup_done(false), _running(false){
+Session::Session(asio::ip::tcp::socket &&socket)
+    : _socket{std::move(socket)}, _startup_done(false), _running(false) {
 
-                                                        };
+      };
 Session::~Session() = default;
 
 void Session::start(ParseHandler &&handler) {
@@ -54,7 +65,7 @@ void Session::start(ParseHandler &&handler) {
                 continue;
             }
             // assert(msg != nullptr);
-            process_message(handler, std::move(msg));
+            process_message(handler, std::move(msg)).resolve();
         } catch (SqlException &e) {
             if (e.get_severity() == ErrorSeverity::Fatal) {
                 _running = false;
@@ -63,8 +74,8 @@ void Session::start(ParseHandler &&handler) {
 
             ErrorResponse error_responsse{e.get_message(), e.get_sqlstate(),
                                           e.get_severity()};
-            this->write(encode_bytes(error_responsse));
-            this->write(encode_bytes(ReadyForQuery{}));
+            this->write(encode_bytes(error_responsse))
+                .then(this->write(encode_bytes(ReadyForQuery{})));
         } catch (std::exception &e) {
             // terminate session when unexpected exception occured
             _running = false;
@@ -73,37 +84,40 @@ void Session::start(ParseHandler &&handler) {
     }
 }
 
-void Session::process_message(ParseHandler &handler, FrontendMessagePtr msg) {
-
+Promise Session::process_message(ParseHandler &handler,
+                                 FrontendMessagePtr msg) {
     switch (msg->type()) {
     case FrontendType::Invalid:
     case FrontendType::Startup:
-        this->write(encode_bytes(AuthenticationOk{}));
-
-        for (const auto &[k, v] : server_status) {
-            this->write(encode_bytes(ParameterStatus{k, v}));
-        }
-
-        this->write(encode_bytes(ReadyForQuery{}));
-        break;
+        return this->write(encode_bytes(AuthenticationOk{}))
+            .then(newPromise([this](Defer &defer) {
+                Promise promise = resolve();
+                for (const auto &[k, v] : server_status) {
+                    promise = promise.then(
+                        this->write(encode_bytes(ParameterStatus{k, v})));
+                }
+                promise.finally([defer]() { defer.resolve(); });
+            }))
+            .then(this->write(encode_bytes(ReadyForQuery{})));
     case FrontendType::SSLRequest:
-        this->write(encode_bytes(SSLResponse{}));
-        break;
+        return this->write(encode_bytes(SSLResponse{}));
     case FrontendType::Query: {
         auto *query = static_cast<Query *>(msg.get());
+        // use shared_ptr to extend PreparedStatement, so it can outlive this
+        // function
+        auto prepared =
+            std::make_shared<PreparedStatement>(handler(query->query));
+        return this->write(encode_bytes(RowDescription{prepared->fields}))
+            .then(newPromise([this, prepared](Defer &defer) {
+                Writer writer{prepared->fields.size()};
+                prepared->handler(writer, {});
 
-        auto prepared = handler(query->query);
-        this->write(encode_bytes(RowDescription{prepared.fields}));
-
-        Writer writer{prepared.fields.size()};
-        prepared.handler(writer, {});
-        this->write(encode_bytes(writer));
-
-        this->write(encode_bytes(CommandComplete{
-            string_format("SELECT %lu", writer.num_rows())
-        }));
-
-        this->write(encode_bytes(ReadyForQuery{}));
+                this->write(encode_bytes(writer))
+                    .then(this->write(encode_bytes(CommandComplete{
+                        string_format("SELECT %lu", writer.num_rows())})))
+                    .finally([defer]() { defer.resolve(); });
+            }))
+            .then(this->write(encode_bytes(ReadyForQuery{})));
 
         break;
     }
@@ -122,11 +136,13 @@ void Session::process_message(ParseHandler &handler, FrontendMessagePtr msg) {
     case FrontendType::GSSResponse:
     case FrontendType::SASLResponse:
     case FrontendType::SASLInitialResponse:
-        // std::cout << "message type still not handled, type="
+        // std::cerr << "message type still not handled, type="
         //           << int(msg->type()) << "tag=" << char(msg->tag())
         //           << std::endl;
         break;
     }
+
+    return resolve();
 }
 
 static std::unordered_map<FrontendTag, std::function<FrontendMessage *()>>
@@ -136,7 +152,7 @@ static std::unordered_map<FrontendTag, std::function<FrontendMessage *()>>
 };
 
 FrontendMessagePtr Session::read() {
-    // std::cout << "reading startup=" << _startup_done << std::endl;
+    // std::cerr << "reading startup=" << _startup_done << std::endl;
     if (!_startup_done) {
         return read_startup();
     }
@@ -146,7 +162,8 @@ FrontendMessagePtr Session::read() {
     MessageTag tag = 0;
     int32_t len = 0;
 
-    asio::read(_socket, buffer(header), asio::transfer_exactly(kHeaderSize));
+    asio::read(_socket, asio::buffer(header),
+               asio::transfer_exactly(kHeaderSize));
 
     Buffer headerBuffer(std::move(header));
     tag = headerBuffer.get_numeric<MessageTag>();
@@ -154,11 +171,12 @@ FrontendMessagePtr Session::read() {
     len = len - sizeof(int32_t); // to exclude it self length
 
     Bytes body(len);
-    asio::read(_socket, buffer(body), asio::transfer_exactly(body.size()));
+    asio::read(_socket, asio::buffer(body),
+               asio::transfer_exactly(body.size()));
 
     auto it = sFrontendMessageRegsitry.find(FrontendTag(tag));
     if (it == sFrontendMessageRegsitry.end()) {
-        // std::cout << "message tag '" << tag << "' not supported, len=" << len
+        // std::cerr << "message tag '" << tag << "' not supported, len=" << len
         //           << std::endl;
         return nullptr;
     }
@@ -175,14 +193,15 @@ FrontendMessagePtr Session::read_startup() {
     int32_t lenBuf = 0;
     Bytes bytes = {};
 
-    asio::read(_socket,
-               buffer(reinterpret_cast<uint8_t *>(&lenBuf), sizeof(int32_t)),
-               asio::transfer_exactly(sizeof(int32_t)));
+    asio::read(
+        _socket,
+        asio::buffer(reinterpret_cast<uint8_t *>(&lenBuf), sizeof(int32_t)),
+        asio::transfer_exactly(sizeof(int32_t)));
     len = endian::network::get<int32_t>(reinterpret_cast<uint8_t *>(&lenBuf));
 
     std::size_t size = len - sizeof(int32_t);
     bytes.resize(size);
-    asio::read(_socket, buffer(bytes), asio::transfer_exactly(size));
+    asio::read(_socket, asio::buffer(bytes), asio::transfer_exactly(size));
 
     Buffer buf{std::move(bytes)};
     auto msg = std::make_unique<StartupMessage>();
@@ -193,29 +212,45 @@ FrontendMessagePtr Session::read_startup() {
 
     return msg;
 }
-void Session::write(Bytes &&b) { asio::write(_socket, buffer(b)); }
 
-Server::Server(io_context &io_context, ip::tcp::endpoint endpoint,
-               Handler &&handler)
-    : _io_context{io_context}, _acceptor{io_context, endpoint},
-      _handler(std::move(handler)){};
-
-void Server::start() {
-    for (;;) {
-        accept();
-    }
+Promise Session::write(Bytes &&b) {
+    // use shared_buffer to extend the lifetime of bytes
+    // since it can outlive this function
+    auto shared = std::make_shared<Bytes>(std::move(b));
+    return async_write(_socket, asio::buffer(*shared)).finally([shared]() {
+        // ensure the shared bytes is destroyed at the end
+    });
 }
 
-void Server::accept() {
-    ip::tcp::socket socket(_io_context);
-    _acceptor.accept(socket);
+Server::Server(asio::io_context &io_context, asio::ip::tcp::endpoint endpoint,
+               Handler &&handler)
+    : _io_context{io_context}, _acceptor{io_context, endpoint},
+      _handler(std::move(handler)) {
+    _impl = std::make_unique<ServerImpl>(*this);
+};
 
-    // TODO: manage the connection
-    std::thread([s = std::move(socket), this]() mutable {
-        Session session(std::move(s));
-        auto handler = _handler(session);
-        session.start(std::move(handler));
-    }).detach();
+Server::~Server() = default;
+
+void Server::start() {
+    _impl->do_accept();
+    _io_context.run();
+}
+
+ServerImpl::ServerImpl(Server &server) : _server(server) {}
+
+void ServerImpl::do_accept() {
+    _server._acceptor.async_accept(
+        [this](std::error_code ec, asio::ip::tcp::socket socket) {
+            if (!ec) {
+                std::thread([s = std::move(socket), this]() mutable {
+                    Session session(std::move(s));
+                    auto handler = _server._handler(session);
+                    session.start(std::move(handler));
+                }).detach();
+            }
+
+            do_accept();
+        });
 }
 
 } // namespace pgwire
