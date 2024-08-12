@@ -1,14 +1,11 @@
-#include "pgwire/io.hpp"
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdio>
-#include <exception>
-#include <iostream>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
 
+#include <pgwire/io.hpp>
 #include <pgwire/protocol.hpp>
 #include <pgwire/server.hpp>
 #include <pgwire/types.hpp>
@@ -18,7 +15,6 @@
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
 #include <endian/network.hpp>
-#include <promise-cpp/promise.hpp>
 
 namespace pgwire {
 

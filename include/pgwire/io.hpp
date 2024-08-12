@@ -1,7 +1,7 @@
 #pragma once
 
-#include "asio/completion_condition.hpp"
 #include <iostream>
+
 #include <pgwire/types.hpp>
 
 #include <asio.hpp>
