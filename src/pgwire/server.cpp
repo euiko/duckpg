@@ -182,7 +182,7 @@ Promise Session::read() {
     auto header = std::make_shared<Bytes>(kHeaderSize);
     auto body = std::make_shared<Bytes>();
 
-    return async_read_exact(_socket, asio::buffer(*header), kHeaderSize)
+    return async_read_exact(_socket, asio::buffer(*header))
         .then([=] {
             Buffer headerBuffer(std::move(*header));
             MessageTag tag = headerBuffer.get_numeric<MessageTag>();
@@ -194,32 +194,29 @@ Promise Session::read() {
         })
         .then([=](MessageTag tag, std::size_t size) {
             body->resize(size);
-            return async_read_exact(_socket, asio::buffer(*body), size)
-                .then([=] {
-                    auto it = sFrontendMessageRegsitry.find(FrontendTag(tag));
-                    if (it == sFrontendMessageRegsitry.end()) {
-                        // std::cerr << "message tag '" << tag << "' not
-                        // supported, len=" << len << std::endl;
-                        return resolve(FrontendMessagePtr(nullptr));
-                    }
+            return async_read_exact(_socket, asio::buffer(*body)).then([=] {
+                auto it = sFrontendMessageRegsitry.find(FrontendTag(tag));
+                if (it == sFrontendMessageRegsitry.end()) {
+                    // std::cerr << "message tag '" << tag << "' not
+                    // supported, len=" << len << std::endl;
+                    return resolve(FrontendMessagePtr(nullptr));
+                }
 
-                    Buffer buff(std::move(*body));
-                    auto fn = it->second;
-                    auto message = FrontendMessagePtr(fn());
-                    message->decode(buff);
+                Buffer buff(std::move(*body));
+                auto fn = it->second;
+                auto message = FrontendMessagePtr(fn());
+                message->decode(buff);
 
-                    return resolve(message);
-                });
+                return resolve(message);
+            });
         });
 }
 Promise Session::read_startup() {
     auto lenBuf = std::make_shared<int32_t>(0);
     auto bytes = std::make_shared<Bytes>();
     return async_read_exact(
-               _socket,
-               asio::buffer(reinterpret_cast<uint8_t *>(lenBuf.get()),
-                            sizeof(int32_t)),
-               sizeof(int32_t))
+               _socket, asio::buffer(reinterpret_cast<uint8_t *>(lenBuf.get()),
+                                     sizeof(int32_t)))
         .then([lenBuf] {
             int32_t len = endian::network::get<int32_t>(
                 reinterpret_cast<uint8_t *>(lenBuf.get()));
@@ -229,17 +226,16 @@ Promise Session::read_startup() {
         })
         .then([=](std::size_t size) {
             bytes->resize(size);
-            return async_read_exact(_socket, asio::buffer(*bytes), size)
-                .then([=]() {
-                    Buffer buf{std::move(*bytes)};
-                    auto msg = std::make_shared<StartupMessage>();
-                    msg->decode(buf);
+            return async_read_exact(_socket, asio::buffer(*bytes)).then([=]() {
+                Buffer buf{std::move(*bytes)};
+                auto msg = std::make_shared<StartupMessage>();
+                msg->decode(buf);
 
-                    if (!msg->is_ssl_request)
-                        _startup_done = true;
+                if (!msg->is_ssl_request)
+                    _startup_done = true;
 
-                    return resolve(FrontendMessagePtr(msg));
-                });
+                return resolve(FrontendMessagePtr(msg));
+            });
         });
 }
 
