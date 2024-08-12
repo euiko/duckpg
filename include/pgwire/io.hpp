@@ -1,5 +1,6 @@
 #pragma once
 
+#include "asio/completion_condition.hpp"
 #include <iostream>
 #include <pgwire/types.hpp>
 
@@ -14,6 +15,7 @@ using promise::newPromise;
 using promise::Promise;
 using promise::reject;
 using promise::resolve;
+using promise::handleUncaughtException;
 
 // A reference-counted non-modifiable buffer class.
 class shared_buffer {
@@ -50,6 +52,18 @@ inline Promise async_write(Stream &stream, Buffer const &buffer) {
         // write
         asio::async_write(
             stream, buffer,
+            [defer](asio::error_code err, std::size_t bytes_transferred) {
+                setPromise(defer, err, bytes_transferred);
+            });
+    });
+}
+
+template <typename Stream, typename Buffer>
+inline Promise async_read_exact(Stream &stream, const Buffer &buffer) {
+    return newPromise([&](Defer &defer) {
+        // read
+        asio::async_read(
+            stream, buffer, asio::transfer_exactly(buffer.size()),
             [defer](asio::error_code err, std::size_t bytes_transferred) {
                 setPromise(defer, err, bytes_transferred);
             });

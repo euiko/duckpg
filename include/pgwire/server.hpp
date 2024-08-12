@@ -46,25 +46,28 @@ class SqlException : public std::exception {
 };
 
 using ParseHandler = std::function<PreparedStatement(std::string const &)>;
+
 class Session {
   public:
     Session(asio::ip::tcp::socket &&socket);
     ~Session();
 
-    void start(ParseHandler &&handler);
+    Promise start(ParseHandler &&handler);
     Promise process_message(ParseHandler &handler, FrontendMessagePtr msg);
 
   private:
-    FrontendMessagePtr read();
-    FrontendMessagePtr read_startup();
+    void do_read(ParseHandler &handler, Defer &defer);
+    Promise read();
+    Promise read_startup();
     Promise write(Bytes &&b);
 
   private:
-    bool _running;
     bool _startup_done;
     asio::ip::tcp::socket _socket;
 };
 
+using SessionID = std::size_t;
+using SessionPtr = std::shared_ptr<Session>;
 using Handler = std::function<ParseHandler(Session &session)>;
 
 class ServerImpl;
@@ -84,5 +87,6 @@ class Server {
     asio::ip::tcp::acceptor _acceptor;
     Handler _handler;
     std::unique_ptr<ServerImpl> _impl;
+    std::unordered_map<SessionID, SessionPtr> _sessions;
 };
 } // namespace pgwire
