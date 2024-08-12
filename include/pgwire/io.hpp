@@ -11,11 +11,11 @@ namespace pgwire {
 
 using promise::all;
 using promise::Defer;
+using promise::handleUncaughtException;
 using promise::newPromise;
 using promise::Promise;
 using promise::reject;
 using promise::resolve;
-using promise::handleUncaughtException;
 
 // A reference-counted non-modifiable buffer class.
 class shared_buffer {
@@ -59,11 +59,12 @@ inline Promise async_write(Stream &stream, Buffer const &buffer) {
 }
 
 template <typename Stream, typename Buffer>
-inline Promise async_read_exact(Stream &stream, const Buffer &buffer) {
+inline Promise async_read_exact(Stream &stream, const Buffer &buffer,
+                                std::size_t size) {
     return newPromise([&](Defer &defer) {
         // read
         asio::async_read(
-            stream, buffer, asio::transfer_exactly(buffer.size()),
+            stream, buffer, asio::transfer_exactly(size),
             [defer](asio::error_code err, std::size_t bytes_transferred) {
                 setPromise(defer, err, bytes_transferred);
             });

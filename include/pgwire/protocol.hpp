@@ -152,6 +152,7 @@ struct ErrorResponse : public BackendMessage {
 };
 
 struct FrontendMessage {
+    virtual ~FrontendMessage() = default;
     virtual FrontendType type() const noexcept = 0;
     virtual FrontendTag tag() const noexcept = 0;
     virtual void decode(Buffer &) = 0;

@@ -1,12 +1,14 @@
 #pragma once
 
-#include <asio.hpp>
-#include <function2/function2.hpp>
+#include <optional>
 
 #include <pgwire/io.hpp>
 #include <pgwire/protocol.hpp>
 #include <pgwire/types.hpp>
 #include <pgwire/writer.hpp>
+
+#include <asio.hpp>
+#include <function2/function2.hpp>
 
 namespace pgwire {
 
@@ -15,6 +17,8 @@ using Values = std::vector<Value>;
 
 using ExecHandler =
     fu2::unique_function<void(Writer &writer, Values const &arguments)>;
+
+class ServerImpl;
 
 struct PreparedStatement {
     Fields fields;
@@ -52,25 +56,27 @@ class Session {
     Session(asio::ip::tcp::socket &&socket);
     ~Session();
 
-    Promise start(ParseHandler &&handler);
-    Promise process_message(ParseHandler &handler, FrontendMessagePtr msg);
+    Promise start();
+    Promise process_message(FrontendMessagePtr msg);
 
   private:
-    void do_read(ParseHandler &handler, Defer &defer);
+    void set_handler(ParseHandler &&handler);
+    void do_read(Defer &defer);
     Promise read();
     Promise read_startup();
     Promise write(Bytes &&b);
 
   private:
+    friend class ServerImpl;
+
     bool _startup_done;
     asio::ip::tcp::socket _socket;
+    std::optional<ParseHandler> _handler;
 };
 
 using SessionID = std::size_t;
 using SessionPtr = std::shared_ptr<Session>;
 using Handler = std::function<ParseHandler(Session &session)>;
-
-class ServerImpl;
 
 class Server {
   public:
@@ -82,7 +88,6 @@ class Server {
   private:
     friend class ServerImpl;
 
-  private:
     asio::io_context &_io_context;
     asio::ip::tcp::acceptor _acceptor;
     Handler _handler;
