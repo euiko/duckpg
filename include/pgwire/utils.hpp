@@ -1,6 +1,8 @@
+#pragma once
+
 #include <cstdio>
 #include <string>
 
 namespace pgwire {
-    std::string string_format(const char* format, ...);
+std::string string_format(const char *format, ...);
 };

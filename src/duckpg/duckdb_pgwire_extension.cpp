@@ -9,11 +9,10 @@
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 #include <atomic>
-#include <mutex>
+#include <optional>
 #include <pgwire/server.hpp>
 #include <pgwire/types.hpp>
 #include <stdexcept>
-#include <unordered_map>
 
 namespace duckdb {
 
@@ -122,12 +121,13 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
             }
 
             // can't uses emplace_back for POD struct in C++17
-            stmt.fields.push_back({ name, oid });
+            stmt.fields.push_back({name, oid});
         }
 
         stmt.handler = [column_total, p = std::move(prepared)](
                            pgwire::Writer &writer,
                            pgwire::Values const &parameters) mutable {
+
             std::unique_ptr<QueryResult> result;
             std::optional<pgwire::SqlException> error;
 
@@ -206,7 +206,6 @@ static void start_server(DatabaseInstance &db) {
         io_context, endpoint,
         [&db](pgwire::Session &sess) mutable { return duckdb_handler(db); });
     server.start();
-    io_context.run();
 }
 
 inline void PgIsInRecovery(DataChunk &args, ExpressionState &state,

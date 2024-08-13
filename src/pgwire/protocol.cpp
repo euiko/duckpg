@@ -125,7 +125,7 @@ void StartupMessage::decode(Buffer &b) {
             continue;
 
         // found null termination read the string
-        std::string value{b.buffer() + start, b.buffer() + start + i};
+        std::string value{b.buffer() + start, b.buffer() + i};
         start = i + 1;
 
         // non existing key, put to temporary string

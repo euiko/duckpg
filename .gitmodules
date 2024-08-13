@@ -10,3 +10,6 @@
 [submodule "third_party/function2"]
 	path = third_party/function2
 	url = https://github.com/Naios/function2.git
+[submodule "third_party/promise-cpp"]
+	path = third_party/promise-cpp
+	url = https://github.com/xhawk18/promise-cpp

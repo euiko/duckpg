@@ -1,11 +1,14 @@
 #pragma once
 
-#include <asio.hpp>
-#include <function2/function2.hpp>
 #include <optional>
+
+#include <pgwire/io.hpp>
 #include <pgwire/protocol.hpp>
 #include <pgwire/types.hpp>
 #include <pgwire/writer.hpp>
+
+#include <asio.hpp>
+#include <function2/function2.hpp>
 
 namespace pgwire {
 
@@ -14,6 +17,8 @@ using Values = std::vector<Value>;
 
 using ExecHandler =
     fu2::unique_function<void(Writer &writer, Values const &arguments)>;
+
+class ServerImpl;
 
 struct PreparedStatement {
     Fields fields;
@@ -45,39 +50,48 @@ class SqlException : public std::exception {
 };
 
 using ParseHandler = std::function<PreparedStatement(std::string const &)>;
+
 class Session {
   public:
     Session(asio::ip::tcp::socket &&socket);
     ~Session();
 
-    void start(ParseHandler &&handler);
-    void process_message(ParseHandler &handler, FrontendMessagePtr msg);
+    Promise start();
+    Promise process_message(FrontendMessagePtr msg);
 
   private:
-    FrontendMessagePtr read();
-    FrontendMessagePtr read_startup();
-    void write(Bytes &&b);
+    void set_handler(ParseHandler &&handler);
+    void do_read(Defer &defer);
+    Promise read();
+    Promise read_startup();
+    Promise write(Bytes &&b);
 
   private:
-    bool _running;
+    friend class ServerImpl;
+
     bool _startup_done;
     asio::ip::tcp::socket _socket;
+    std::optional<ParseHandler> _handler;
 };
 
+using SessionID = std::size_t;
+using SessionPtr = std::shared_ptr<Session>;
 using Handler = std::function<ParseHandler(Session &session)>;
 
 class Server {
   public:
     Server(asio::io_context &io_context, asio::ip::tcp::endpoint endpoint,
            Handler &&handler);
+    ~Server();
     void start();
 
   private:
-    void accept();
+    friend class ServerImpl;
 
-  private:
     asio::io_context &_io_context;
     asio::ip::tcp::acceptor _acceptor;
     Handler _handler;
+    std::unique_ptr<ServerImpl> _impl;
+    std::unordered_map<SessionID, SessionPtr> _sessions;
 };
 } // namespace pgwire
