@@ -5,6 +5,9 @@
 #include <pgwire/types.hpp>
 
 #include <asio.hpp>
+
+#define PROMISE_MULTITHREAD 0
+#define PROMISE_HEADONLY
 #include <promise-cpp/promise.hpp>
 
 namespace pgwire {
