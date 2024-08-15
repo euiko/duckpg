@@ -12,6 +12,7 @@
 #include <optional>
 #include <pgwire/server.hpp>
 #include <pgwire/types.hpp>
+#include <pgwire/log.hpp>
 #include <stdexcept>
 
 namespace duckdb {
@@ -201,6 +202,8 @@ static void start_server(DatabaseInstance &db) {
 
     io_context io_context;
     ip::tcp::endpoint endpoint(ip::tcp::v4(), 15432);
+
+    pgwire::log::initialize(io_context, "duckdb_pgwire.log");
 
     pgwire::Server server(
         io_context, endpoint,

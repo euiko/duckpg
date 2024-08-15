@@ -1,7 +1,8 @@
-#include "pgwire/protocol.hpp"
-#include "pgwire/types.hpp"
-#include "pgwire/writer.hpp"
+#include <pgwire/log.hpp>
+#include <pgwire/protocol.hpp>
 #include <pgwire/server.hpp>
+#include <pgwire/types.hpp>
+#include <pgwire/writer.hpp>
 
 #include <asio.hpp>
 
@@ -29,6 +30,8 @@ int main(int argc, char **argv) {
 
     io_context io_context;
     ip::tcp::endpoint endpoint(ip::tcp::v4(), 15432);
+
+    pgwire::log::initialize(io_context);
 
     pgwire::Server server(io_context, endpoint,
                           [](pgwire::Session &sess) { return handler; });

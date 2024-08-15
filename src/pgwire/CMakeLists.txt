@@ -1,6 +1,7 @@
 add_library(pgwire STATIC
   buffer.cpp
   io.cpp
+  log.cpp
   protocol.cpp
   server.cpp
   types.cpp

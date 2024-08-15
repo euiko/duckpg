@@ -1,3 +1,4 @@
+
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
@@ -6,6 +7,7 @@
 #include <unordered_map>
 
 #include <pgwire/io.hpp>
+#include <pgwire/log.hpp>
 #include <pgwire/protocol.hpp>
 #include <pgwire/server.hpp>
 #include <pgwire/types.hpp>
@@ -262,19 +264,23 @@ ServerImpl::ServerImpl(Server &server) : _server(server) {}
 
 std::atomic<std::size_t> sess_id_counter = 0;
 void ServerImpl::do_accept() {
-    _server._acceptor.async_accept([this](std::error_code ec,
-                                          asio::ip::tcp::socket socket) {
-        if (!ec) {
-            SessionID id = ++sess_id_counter;
-            auto session = std::make_shared<Session>(std::move(socket));
-            session->set_handler(_server._handler(*session));
-            session->start().then([id, this] { _server._sessions.erase(id); });
+    _server._acceptor.async_accept(
+        [this](std::error_code ec, asio::ip::tcp::socket socket) {
+            if (!ec) {
+                SessionID id = ++sess_id_counter;
+                log::info("session %d started", id);
+                auto session = std::make_shared<Session>(std::move(socket));
+                session->set_handler(_server._handler(*session));
+                session->start().then([id, this] {
+                    log::info("session %d done", id);
+                    _server._sessions.erase(id);
+                });
 
-            _server._sessions.emplace(id, session);
-        }
+                _server._sessions.emplace(id, session);
+            }
 
-        do_accept();
-    });
+            do_accept();
+        });
 }
 
 } // namespace pgwire
