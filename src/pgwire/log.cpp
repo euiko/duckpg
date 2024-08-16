@@ -10,6 +10,12 @@ namespace pgwire::log {
 
 static std::unique_ptr<Writer> writer = nullptr;
 
+enum class Level {
+    Info,
+    Warning,
+    Error,
+};
+
 std::string now_rfc3339() {
     // https://stackoverflow.com/a/48772690
     time_t now;
@@ -23,104 +29,58 @@ std::string now_rfc3339() {
         sprintf(buf + len - 2, ":%s", minute);
     }
 
-    return {buf, len + 1};
+    // add one to account the colon (:)
+    return std::string(buf, len + 1);
 }
 
-Promise warning(char const *format, ...) {
+Promise log(Level level, char const *format, va_list args) {
     if (!writer) {
         return resolve();
     }
 
-    va_list args;
-    va_start(args, format);
     std::string message = string_format_args(format, args);
-    va_end(args);
-
     std::string now = now_rfc3339();
-    return writer->write(
-        string_format("[WARNING] %s - %s\n", now.c_str(), message.c_str()));
-}
-
-Promise info(char const *format, ...) {
-    if (!writer) {
-        return resolve();
+    char const *level_str = "INFO";
+    switch (level) {
+    case Level::Warning:
+        level_str = "WARNING";
+        break;
+    case Level::Error:
+        level_str = "ERROR";
+        break;
+    default:
+        break;
     }
 
-    va_list args;
-    va_start(args, format);
-    std::string message = string_format_args(format, args);
-    va_end(args);
-
-    auto &writer = get_writer();
-    std::string now = now_rfc3339();
-    return writer.write(
-        string_format("[INFO] %s - %s\n", now.c_str(), message.c_str()));
+    return writer->write(string_format("[%s] %s - %s\n", level_str, now.c_str(),
+                                       message.c_str()));
 }
 
 Promise error(char const *format, ...) {
-    if (!writer) {
-        return resolve();
-    }
-
     va_list args;
     va_start(args, format);
-    std::string message = string_format_args(format, args);
+    auto promise = log(Level::Error, format, args);
     va_end(args);
 
-    auto &writer = get_writer();
-    std::string now = now_rfc3339();
-    return writer.write(
-        string_format("[ERROR] %s - %s\n", now.c_str(), message.c_str()));
+    return promise;
 }
 
-class StreamWriterImpl {
-  public:
-    StreamWriterImpl(asio::io_context &context, FILE *file, bool close = false);
-    StreamWriterImpl(asio::io_context &context, char const *path,
-                     char const *mode);
+Promise warning(char const *format, ...) {
+    va_list args;
+    va_start(args, format);
+    auto promise = log(Level::Warning, format, args);
+    va_end(args);
 
-    ~StreamWriterImpl();
-    Promise write(char const *message, std::size_t size);
-
-  private:
-    FILE *_file;
-    asio::writable_pipe _pipe;
-    bool _close;
-};
-
-StreamWriterImpl::StreamWriterImpl(asio::io_context &context, FILE *file,
-                                   bool close)
-    : _file(file), _pipe(context, fileno(file)), _close(close) {}
-
-StreamWriterImpl::StreamWriterImpl(asio::io_context &context, char const *path,
-                                   char const *mode)
-    : StreamWriterImpl(context, std::fopen(path, mode), true) {}
-
-StreamWriterImpl::~StreamWriterImpl() {
-    if (_close) {
-        std::fclose(_file);
-    }
+    return promise;
 }
 
-Promise StreamWriterImpl::write(char const *message, std::size_t size) {
-    return async_write(_pipe, asio::buffer(message, size));
-}
+Promise info(char const *format, ...) {
+    va_list args;
+    va_start(args, format);
+    auto promise = log(Level::Info, format, args);
+    va_end(args);
 
-StreamWriter::StreamWriter(asio::io_context &context, FILE *file)
-    : _impl(std::make_unique<StreamWriterImpl>(context, file)) {}
-
-StreamWriter::StreamWriter(asio::io_context &context, char const *path,
-                           char const *mode)
-    : _impl(std::make_unique<StreamWriterImpl>(context, path, mode)) {}
-
-StreamWriter::~StreamWriter() = default;
-
-Promise StreamWriter::write(char const *message, std::size_t size) {
-    return _impl->write(message, size);
-}
-
-Promise StreamWriter::write(std::string const &message) {
-    return _impl->write(message.c_str(), message.size());
+    return promise;
 }
 
 void initialize(asio::io_context &context, const char *file) {

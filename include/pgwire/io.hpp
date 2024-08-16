@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <memory>
 
 #include <pgwire/types.hpp>
 
@@ -72,5 +73,26 @@ inline Promise async_read_exact(Stream &stream, const Buffer &buffer) {
             });
     });
 }
+
+struct Writer {
+    virtual ~Writer() = default;
+    virtual Promise write(char const *message, std::size_t size) = 0;
+    virtual Promise write(std::string const& message) = 0;
+};
+
+class StreamWriterImpl;
+class StreamWriter : public Writer {
+  public:
+    StreamWriter(asio::io_context &context, FILE *file = stderr);
+    explicit StreamWriter(asio::io_context &context, char const *path,
+                          char const *mode);
+    ~StreamWriter();
+
+    Promise write(char const *message, std::size_t size) override;
+    Promise write(std::string const& message) override;
+
+  private:
+    std::unique_ptr<StreamWriterImpl> _impl;
+};
 
 } // namespace pgwire
