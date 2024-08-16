@@ -10,6 +10,6 @@ Promise info(char const *format, ...);
 Promise error(char const *format, ...);
 
 void initialize(asio::io_context &context, const char *file = nullptr);
-Writer &get_writer();
+io::Writer &get_writer();
 
 } // namespace pgwire::log

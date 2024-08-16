@@ -8,7 +8,7 @@
 
 namespace pgwire::log {
 
-static std::unique_ptr<Writer> writer = nullptr;
+static std::unique_ptr<io::Writer> writer = nullptr;
 
 enum class Level {
     Info,
@@ -85,13 +85,13 @@ Promise info(char const *format, ...) {
 
 void initialize(asio::io_context &context, const char *file) {
     if (file == nullptr) {
-        writer = std::make_unique<StreamWriter>(context, stderr);
+        writer = std::make_unique<io::StreamWriter>(context, stderr);
     } else {
-        writer = std::make_unique<StreamWriter>(context, file, "a");
+        writer = std::make_unique<io::StreamWriter>(context, file, "a");
     }
 }
 
-Writer &get_writer() {
+io::Writer &get_writer() {
     if (!writer) {
         throw std::runtime_error("log not yet initialized");
     }

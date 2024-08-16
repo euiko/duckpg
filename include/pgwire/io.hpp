@@ -3,23 +3,12 @@
 #include <iostream>
 #include <memory>
 
+#include <pgwire/promise.hpp>
 #include <pgwire/types.hpp>
 
 #include <asio.hpp>
 
-#define PROMISE_MULTITHREAD 0
-#define PROMISE_HEADONLY
-#include <promise-cpp/promise.hpp>
-
-namespace pgwire {
-
-using promise::all;
-using promise::Defer;
-using promise::handleUncaughtException;
-using promise::newPromise;
-using promise::Promise;
-using promise::reject;
-using promise::resolve;
+namespace pgwire::io {
 
 // A reference-counted non-modifiable buffer class.
 class shared_buffer {

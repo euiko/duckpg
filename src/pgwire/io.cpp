@@ -1,6 +1,6 @@
 #include <pgwire/io.hpp>
 
-namespace pgwire {
+namespace pgwire::io {
 
 class StreamWriterImpl {
   public:

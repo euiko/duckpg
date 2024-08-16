@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <optional>
+#include <pgwire/exception.hpp>
 #include <pgwire/server.hpp>
 #include <pgwire/types.hpp>
 #include <pgwire/log.hpp>
