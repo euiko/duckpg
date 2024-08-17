@@ -203,13 +203,13 @@ enum class SqlState {
     InvalidDatetimeFormat,
 };
 
-const char *get_sqlstate_code(SqlState state);
+char const *get_sqlstate_code(SqlState state);
 
 enum class ErrorSeverity {
     Error,
     Fatal,
 };
 
-const char *get_error_severity(ErrorSeverity severity);
+char const *get_error_severity(ErrorSeverity severity);
 
 } // namespace pgwire

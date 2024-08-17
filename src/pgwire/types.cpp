@@ -309,7 +309,7 @@ int16_t get_oid_size(Oid oid) {
     return -1;
 }
 
-const char *get_sqlstate_code(SqlState state) {
+char const *get_sqlstate_code(SqlState state) {
     switch (state) {
     case SqlState::SuccessfulCompletion:
         return "00000";
@@ -334,7 +334,7 @@ const char *get_sqlstate_code(SqlState state) {
     return "";
 }
 
-const char *get_error_severity(ErrorSeverity severity) {
+char const *get_error_severity(ErrorSeverity severity) {
     switch (severity) {
     case ErrorSeverity::Error:
         return "ERROR";

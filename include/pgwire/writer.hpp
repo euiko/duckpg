@@ -4,9 +4,6 @@
 #include <pgwire/protocol.hpp>
 #include <pgwire/types.hpp>
 
-#include <cstdint>
-#include <type_traits>
-
 namespace pgwire {
 class Writer;
 class RowWriter;

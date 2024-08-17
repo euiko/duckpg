@@ -1,3 +1,5 @@
+#include "duckdb/common/types.hpp"
+#include <unordered_map>
 #define DUCKDB_EXTENSION_MAIN
 
 #include <duckpg/duckdb_pgwire_extension.hpp>
@@ -10,13 +12,30 @@
 
 #include <atomic>
 #include <optional>
+#include <pgwire/exception.hpp>
+#include <pgwire/log.hpp>
 #include <pgwire/server.hpp>
 #include <pgwire/types.hpp>
 #include <stdexcept>
 
 namespace duckdb {
 
-std::atomic<bool> g_started;
+static std::atomic<bool> g_started;
+
+static std::unordered_map<LogicalTypeId, pgwire::Oid> g_typemap = {
+    {LogicalTypeId::FLOAT, pgwire::Oid::Float4},
+    {LogicalTypeId::DOUBLE, pgwire::Oid::Float8},
+    // {LogicalTypeId::TINYINT, pgwire::Oid::Char},
+    {LogicalTypeId::SMALLINT, pgwire::Oid::Int2},
+    {LogicalTypeId::INTEGER, pgwire::Oid::Int4},
+    {LogicalTypeId::BIGINT, pgwire::Oid::Int8},
+    // uses string
+    {LogicalTypeId::VARCHAR, pgwire::Oid::Varchar},
+    {LogicalTypeId::DATE, pgwire::Oid::Date},
+    {LogicalTypeId::TIME, pgwire::Oid::Time},
+    {LogicalTypeId::TIMESTAMP, pgwire::Oid::Timestamp},
+    {LogicalTypeId::TIMESTAMP, pgwire::Oid::TimestampTz},
+};
 
 static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
     return [&db](std::string const &query) mutable {
@@ -58,67 +77,11 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
             auto &name = column_names[i];
             auto &type = column_types[i];
 
-            auto oid = pgwire::Oid::Unknown;
-
-            switch (type.id()) {
-            case LogicalTypeId::VARCHAR:
-                oid = pgwire::Oid::Varchar;
-                break;
-            case LogicalTypeId::FLOAT:
-                oid = pgwire::Oid::Float4;
-                break;
-            case LogicalTypeId::DOUBLE:
-                oid = pgwire::Oid::Float8;
-                break;
-            case LogicalTypeId::SMALLINT:
-                oid = pgwire::Oid::Int2;
-                break;
-            case LogicalTypeId::INTEGER:
-                oid = pgwire::Oid::Int4;
-                break;
-            case LogicalTypeId::BIGINT:
-                oid = pgwire::Oid::Int8;
-                break;
-            case LogicalTypeId::BOOLEAN:
-                oid = pgwire::Oid::Bool;
-                break;
-            case LogicalTypeId::TINYINT:
-            case LogicalTypeId::INVALID:
-            case LogicalTypeId::SQLNULL:
-            case LogicalTypeId::UNKNOWN:
-            case LogicalTypeId::ANY:
-            case LogicalTypeId::USER:
-            case LogicalTypeId::DATE:
-            case LogicalTypeId::TIME:
-            case LogicalTypeId::TIMESTAMP_SEC:
-            case LogicalTypeId::TIMESTAMP_MS:
-            case LogicalTypeId::TIMESTAMP:
-            case LogicalTypeId::TIMESTAMP_NS:
-            case LogicalTypeId::DECIMAL:
-            case LogicalTypeId::CHAR:
-            case LogicalTypeId::BLOB:
-            case LogicalTypeId::INTERVAL:
-            case LogicalTypeId::UTINYINT:
-            case LogicalTypeId::USMALLINT:
-            case LogicalTypeId::UINTEGER:
-            case LogicalTypeId::UBIGINT:
-            case LogicalTypeId::TIMESTAMP_TZ:
-            case LogicalTypeId::TIME_TZ:
-            case LogicalTypeId::BIT:
-            case LogicalTypeId::HUGEINT:
-            case LogicalTypeId::POINTER:
-            case LogicalTypeId::VALIDITY:
-            case LogicalTypeId::UUID:
-            case LogicalTypeId::STRUCT:
-            case LogicalTypeId::LIST:
-            case LogicalTypeId::MAP:
-            case LogicalTypeId::TABLE:
-            case LogicalTypeId::ENUM:
-            case LogicalTypeId::AGGREGATE_STATE:
-            case LogicalTypeId::LAMBDA:
-            case LogicalTypeId::UNION:
-                break;
+            auto it = g_typemap.find(type.id());
+            if (it == g_typemap.end()) {
+                continue;
             }
+            auto oid = it->second;
 
             // can't uses emplace_back for POD struct in C++17
             stmt.fields.push_back({name, oid});
@@ -127,7 +90,6 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
         stmt.handler = [column_total, p = std::move(prepared)](
                            pgwire::Writer &writer,
                            pgwire::Values const &parameters) mutable {
-
             std::unique_ptr<QueryResult> result;
             std::optional<pgwire::SqlException> error;
 
@@ -160,10 +122,12 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
                 for (std::size_t i = 0; i < column_total; i++) {
                     auto &type = column_types[i];
 
+                    auto it = g_typemap.find(type.id());
+                    if (it == g_typemap.end()) {
+                        continue;
+                    }
+
                     switch (type.id()) {
-                    case LogicalTypeId::VARCHAR:
-                        row.write_string(chunk.GetValue<std::string>(i));
-                        break;
                     case LogicalTypeId::FLOAT:
                         row.write_float4(chunk.GetValue<float>(i));
                         break;
@@ -182,13 +146,20 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
                     case LogicalTypeId::BOOLEAN:
                         row.write_bool(chunk.GetValue<bool>(i));
                         break;
+                    case LogicalTypeId::VARCHAR:
+                    case LogicalTypeId::DATE:
+                    case LogicalTypeId::TIME:
+                    case LogicalTypeId::TIMESTAMP:
+                    case LogicalTypeId::TIMESTAMP_TZ:
+                        row.write_string(chunk.GetValue<std::string>(i));
+                        break;
                     default:
                         break;
                     }
                 }
             }
         };
-        return std::move(stmt);
+        return stmt;
     };
 }
 
@@ -201,6 +172,8 @@ static void start_server(DatabaseInstance &db) {
 
     io_context io_context;
     ip::tcp::endpoint endpoint(ip::tcp::v4(), 15432);
+
+    pgwire::log::initialize(io_context, "duckdb_pgwire.log");
 
     pgwire::Server server(
         io_context, endpoint,
