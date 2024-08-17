@@ -1,6 +1,7 @@
 #include <cstdarg>
 #include <stdexcept>
 
+#include <pgwire/io.hpp>
 #include <pgwire/log.hpp>
 #include <pgwire/utils.hpp>
 
@@ -52,8 +53,8 @@ Promise log(Level level, char const *format, va_list args) {
         break;
     }
 
-    return writer->write(string_format("[%s] %s - %s\n", level_str, now.c_str(),
-                                       message.c_str()));
+    return writer->write(
+        string_format("%s [%s] %s\n", now.c_str(), level_str, message.c_str()));
 }
 
 Promise error(char const *format, ...) {

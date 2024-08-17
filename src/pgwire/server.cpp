@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <memory>
-#include <sstream>
 #include <unordered_map>
 
 #include <pgwire/io.hpp>

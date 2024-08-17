@@ -1,12 +1,17 @@
-#include <pgwire/session.hpp>
+#include <iomanip>
+#include <sstream>
 
 #include <pgwire/exception.hpp>
+#include <pgwire/log.hpp>
+#include <pgwire/session.hpp>
 #include <pgwire/utils.hpp>
 
 namespace pgwire {
 
+using QueryId = int64_t;
+static std::atomic<QueryId> id_counter = 0;
 
-std::unordered_map<std::string, std::string> server_status = {
+static std::unordered_map<std::string, std::string> server_status = {
     {"server_version", "14"},     {"server_encoding", "UTF-8"},
     {"client_encoding", "UTF-8"}, {"DateStyle", "ISO"},
     {"TimeZone", "UTC"},
@@ -42,7 +47,7 @@ void Session::do_read(Defer &defer) {
 
         process_message(message)
             .then([&]() { do_read(defer); })
-            .fail([&](std::shared_ptr<SqlException> e) {
+            .fail([&](SqlExceptionPtr e) {
                 if (e->get_severity() == ErrorSeverity::Fatal) {
                     defer.reject(e);
                     return;
@@ -64,9 +69,13 @@ Promise Session::process_message(FrontendMessagePtr msg) {
         return this->write(encode_bytes(AuthenticationOk{}))
             .then([this] {
                 Promise promise = resolve();
-                for (const auto &[k, v] : server_status) {
-                    promise = promise.then(
-                        this->write(encode_bytes(ParameterStatus{k, v})));
+                for (auto const &it : server_status) {
+                    std::string key = it.first;
+                    std::string value = it.second;
+                    promise = promise.then([this, key, value] {
+                        return this->write(
+                            encode_bytes(ParameterStatus{key, value}));
+                    });
                 }
                 return promise;
             })
@@ -76,7 +85,13 @@ Promise Session::process_message(FrontendMessagePtr msg) {
         return this->write(encode_bytes(SSLResponse{}));
     case FrontendType::Query: {
         auto *query = static_cast<Query *>(msg.get());
+        auto id = ++id_counter;
         try {
+            auto quoted = string_escape_space(
+                (std::stringstream() << std::quoted(query->query)).str() //
+            );
+            auto timer = timer_start();
+            log::info("[query #%d] executing query %s", id, quoted.c_str());
             // use shared_ptr to extend PreparedStatement, so it can outlive
             // this function
             auto prepared =
@@ -92,11 +107,22 @@ Promise Session::process_message(FrontendMessagePtr msg) {
                     }
 
                     return this->write(encode_bytes(writer))
-                        .then(this->write(encode_bytes(CommandComplete{
-                            string_format("SELECT %lu", writer.num_rows())})));
+                        .then([this, num_rows = writer.num_rows()] {
+                            return this->write(encode_bytes(CommandComplete{
+                                string_format("SELECT %lu", num_rows)}));
+                        });
                 })
                 .then([this] {
                     return this->write(encode_bytes(ReadyForQuery{}));
+                })
+                .fail([id](SqlExceptionPtr e) {
+                    log::info("[query #%d] query execution failed, error = %s",
+                              id, e->what());
+                })
+                .finally([id, timer] {
+                    auto elapsed = duration_string(timer.elapsed());
+                    log::info("[query #%d] query done, elapsed = %s", id,
+                              elapsed.c_str());
                 });
         } catch (SqlException &e) {
             return reject(std::make_shared<SqlException>(std::move(e)));
@@ -157,8 +183,6 @@ Promise Session::read() {
             return io::async_read_exact(_socket, asio::buffer(*body)).then([=] {
                 auto it = sFrontendMessageRegsitry.find(FrontendTag(tag));
                 if (it == sFrontendMessageRegsitry.end()) {
-                    // std::cerr << "message tag '" << tag << "' not
-                    // supported, len=" << len << std::endl;
                     return resolve(FrontendMessagePtr(nullptr));
                 }
 
@@ -203,8 +227,10 @@ Promise Session::read_startup() {
 Promise Session::write(Bytes &&b) {
     // use shared_buffer to extend the lifetime of bytes
     // since it can outlive this function
-    return io::async_write(_socket, io::make_shared_buffer(std::move(b)));
+    auto shared = std::make_shared<Bytes>(std::move(b));
+    return io::async_write(_socket, asio::buffer(*shared)).finally([shared]() {
+        // ensure the shared bytes is destroyed at the end
+    });
 }
-
 
 } // namespace pgwire

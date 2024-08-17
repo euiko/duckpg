@@ -1,14 +1,17 @@
 #pragma once
 
-#include <iostream>
+#include "asio/buffer.hpp"
 #include <memory>
 
+#include <pgwire/log.hpp>
 #include <pgwire/promise.hpp>
 #include <pgwire/types.hpp>
 
 #include <asio.hpp>
 
 namespace pgwire::io {
+
+constexpr std::size_t max_buffer_size = 1024 * 256; // 500KiB
 
 // A reference-counted non-modifiable buffer class.
 class shared_buffer {
@@ -30,10 +33,10 @@ class shared_buffer {
 shared_buffer make_shared_buffer(Bytes &&bytes);
 
 template <typename Result>
-inline void setPromise(Defer defer, asio::error_code err,
-                       const Result &result) {
+inline void set_promise(Defer defer, asio::error_code err,
+                        const Result &result) {
     if (err) {
-        std::cerr << "setPromise failed: " << err.message() << "\n";
+        log::error("set_promise failed: %s", err.message().c_str());
         defer.reject(err);
     } else
         defer.resolve(result);
@@ -42,11 +45,26 @@ inline void setPromise(Defer defer, asio::error_code err,
 template <typename Stream, typename Buffer>
 inline Promise async_write(Stream &stream, Buffer const &buffer) {
     return newPromise([&](Defer &defer) {
-        // write
+        auto actual_size = buffer_size(buffer);
+        // actual write
         asio::async_write(
             stream, buffer,
-            [defer](asio::error_code err, std::size_t bytes_transferred) {
-                setPromise(defer, err, bytes_transferred);
+            [defer, &stream, buffer,
+             actual_size](asio::error_code err, std::size_t bytes_transferred) {
+                if (bytes_transferred == actual_size) {
+                    set_promise(defer, err, bytes_transferred);
+                } else {
+                    auto current_buffer =
+                        asio::buffer(buffer + bytes_transferred,
+                                     actual_size - bytes_transferred);
+                    async_write(stream, current_buffer)
+                        .then([defer, bytes_transferred](std::size_t len) {
+                            defer.resolve(bytes_transferred + len);
+                        })
+                        .fail([defer](asio::error_code err) {
+                            defer.reject(err);
+                        });
+                }
             });
     });
 }
@@ -58,7 +76,7 @@ inline Promise async_read_exact(Stream &stream, const Buffer &buffer) {
         asio::async_read(
             stream, buffer, asio::transfer_exactly(buffer.size()),
             [defer](asio::error_code err, std::size_t bytes_transferred) {
-                setPromise(defer, err, bytes_transferred);
+                set_promise(defer, err, bytes_transferred);
             });
     });
 }
@@ -66,7 +84,7 @@ inline Promise async_read_exact(Stream &stream, const Buffer &buffer) {
 struct Writer {
     virtual ~Writer() = default;
     virtual Promise write(char const *message, std::size_t size) = 0;
-    virtual Promise write(std::string const& message) = 0;
+    virtual Promise write(std::string const &message) = 0;
 };
 
 class StreamWriterImpl;
@@ -78,10 +96,10 @@ class StreamWriter : public Writer {
     ~StreamWriter();
 
     Promise write(char const *message, std::size_t size) override;
-    Promise write(std::string const& message) override;
+    Promise write(std::string const &message) override;
 
   private:
     std::unique_ptr<StreamWriterImpl> _impl;
 };
 
-} // namespace pgwire
+} // namespace pgwire::io

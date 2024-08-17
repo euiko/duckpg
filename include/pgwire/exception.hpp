@@ -1,6 +1,7 @@
 #pragma once
 
 #include <exception>
+#include <memory>
 #include <string>
 
 #include <pgwire/types.hpp>
@@ -30,5 +31,7 @@ class SqlException : public std::exception {
     ErrorSeverity _error_severity = ErrorSeverity::Error;
     SqlState _error_sqlstate = SqlState::ProtocolViolation;
 };
+
+using SqlExceptionPtr = std::shared_ptr<SqlException>;
 
 } // namespace pgwire

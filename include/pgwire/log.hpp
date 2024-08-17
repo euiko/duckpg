@@ -1,7 +1,12 @@
 #pragma once
 
+#include <pgwire/promise.hpp>
 #include <asio/io_context.hpp>
-#include <pgwire/io.hpp>
+
+// forward declaration
+namespace pgwire::io {
+    struct Writer;
+}
 
 namespace pgwire::log {
 
