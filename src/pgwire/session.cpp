@@ -55,8 +55,9 @@ void Session::do_read(Defer &defer) {
 
                 ErrorResponse error_responsse{
                     e->get_message(), e->get_sqlstate(), e->get_severity()};
-                this->write(encode_bytes(error_responsse))
-                    .then(this->write(encode_bytes(ReadyForQuery{})));
+                this->write(encode_bytes(error_responsse)).then([this] {
+                    return this->write(encode_bytes(ReadyForQuery{}));
+                });
                 do_read(defer);
             });
     });
