@@ -127,6 +127,12 @@ static pgwire::ParseHandler duckdb_handler(DatabaseInstance &db) {
                         continue;
                     }
 
+                    auto value = chunk.iterator.chunk->GetValue(i, chunk.row);
+                    if (value.IsNull()) {
+                        row.write_null();
+                        continue;
+                    }
+
                     switch (type.id()) {
                     case LogicalTypeId::FLOAT:
                         row.write_float4(chunk.GetValue<float>(i));
