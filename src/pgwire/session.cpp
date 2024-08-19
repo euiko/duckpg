@@ -17,10 +17,11 @@ static std::unordered_map<std::string, std::string> server_status = {
     {"TimeZone", "UTC"},
 };
 
-Session::Session(asio::ip::tcp::socket &&socket)
-    : _startup_done(false), _socket{std::move(socket)} {
+Session::Session(SessionID id, asio::ip::tcp::socket &&socket)
+    : _id(id), _startup_done(false), _socket{std::move(socket)} {
 
       };
+
 Session::~Session() = default;
 
 void Session::set_handler(ParseHandler &&handler) {
@@ -28,26 +29,25 @@ void Session::set_handler(ParseHandler &&handler) {
 }
 
 Promise Session::start() {
-    return newPromise([=](Defer &defer) {
-        handleUncaughtException(
-            [=](Promise &d) { d.fail([&]() { defer.resolve(); }); });
-
+    return newPromise([this](Defer &defer) {
         newPromise([=](Defer &read_defer) {
             do_read(read_defer);
         }).fail([defer] { defer.resolve(); });
     });
 }
 
-void Session::do_read(Defer &defer) {
-    this->read().then([&](FrontendMessagePtr message) {
+SessionID Session::id() const { return _id; }
+
+void Session::do_read(Defer defer) {
+    this->read().then([=](FrontendMessagePtr message) {
         if (!message) {
             do_read(defer);
             return;
         }
 
         process_message(message)
-            .then([&]() { do_read(defer); })
-            .fail([&](SqlExceptionPtr e) {
+            .then([=]() { do_read(defer); })
+            .fail([=](SqlExceptionPtr e) {
                 if (e->get_severity() == ErrorSeverity::Fatal) {
                     defer.reject(e);
                     return;
@@ -59,7 +59,8 @@ void Session::do_read(Defer &defer) {
                     return this->write(encode_bytes(ReadyForQuery{}));
                 });
                 do_read(defer);
-            });
+            })
+            .fail([=] { defer.reject(); });
     });
 }
 
@@ -92,7 +93,8 @@ Promise Session::process_message(FrontendMessagePtr msg) {
                 (std::stringstream() << std::quoted(query->query)).str() //
             );
             auto timer = timer_start();
-            log::info("[query #%d] executing query %s", id, quoted.c_str());
+            log::info("[session #%d] [query #%d] executing query %s", _id, id,
+                      quoted.c_str());
             // use shared_ptr to extend PreparedStatement, so it can outlive
             // this function
             auto prepared =
@@ -116,14 +118,16 @@ Promise Session::process_message(FrontendMessagePtr msg) {
                 .then([this] {
                     return this->write(encode_bytes(ReadyForQuery{}));
                 })
-                .fail([id](SqlExceptionPtr e) {
-                    log::info("[query #%d] query execution failed, error = %s",
-                              id, e->what());
+                .fail([this, id](SqlExceptionPtr e) {
+                    log::info("[session #%d] [query #%d] query execution "
+                              "failed, error = %s",
+                              _id, id, e->what());
                 })
-                .finally([id, timer] {
+                .finally([this, id, timer] {
                     auto elapsed = duration_string(timer.elapsed());
-                    log::info("[query #%d] query done, elapsed = %s", id,
-                              elapsed.c_str());
+                    log::info(
+                        "[session #%d] [query #%d] query done, elapsed = %s",
+                        _id, id, elapsed.c_str());
                 });
         } catch (SqlException &e) {
             return reject(std::make_shared<SqlException>(std::move(e)));

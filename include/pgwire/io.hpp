@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asio/buffer.hpp"
+#include "asio/error_code.hpp"
 #include <memory>
 
 #include <pgwire/log.hpp>
@@ -11,6 +12,7 @@
 
 namespace pgwire::io {
 
+using error_code = asio::error_code;
 constexpr std::size_t max_buffer_size = 1024 * 256; // 500KiB
 
 // A reference-counted non-modifiable buffer class.
@@ -33,8 +35,7 @@ class shared_buffer {
 shared_buffer make_shared_buffer(Bytes &&bytes);
 
 template <typename Result>
-inline void set_promise(Defer defer, asio::error_code err,
-                        const Result &result) {
+inline void set_promise(Defer defer, error_code err, const Result &result) {
     if (err) {
         log::error("set_promise failed: %s", err.message().c_str());
         defer.reject(err);
@@ -50,7 +51,7 @@ inline Promise async_write(Stream &stream, Buffer const &buffer) {
         asio::async_write(
             stream, buffer,
             [defer, &stream, buffer,
-             actual_size](asio::error_code err, std::size_t bytes_transferred) {
+             actual_size](error_code err, std::size_t bytes_transferred) {
                 if (bytes_transferred == actual_size) {
                     set_promise(defer, err, bytes_transferred);
                 } else {
@@ -61,9 +62,7 @@ inline Promise async_write(Stream &stream, Buffer const &buffer) {
                         .then([defer, bytes_transferred](std::size_t len) {
                             defer.resolve(bytes_transferred + len);
                         })
-                        .fail([defer](asio::error_code err) {
-                            defer.reject(err);
-                        });
+                        .fail([defer](error_code err) { defer.reject(err); });
                 }
             });
     });
@@ -75,7 +74,7 @@ inline Promise async_read_exact(Stream &stream, const Buffer &buffer) {
         // read
         asio::async_read(
             stream, buffer, asio::transfer_exactly(buffer.size()),
-            [defer](asio::error_code err, std::size_t bytes_transferred) {
+            [defer](error_code err, std::size_t bytes_transferred) {
                 set_promise(defer, err, bytes_transferred);
             });
     });

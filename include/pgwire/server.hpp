@@ -5,7 +5,7 @@
 namespace pgwire {
 
 using Handler = std::function<ParseHandler(Session &session)>;
-
+class ServerImpl;
 class Server {
   public:
     Server(asio::io_context &io_context, asio::ip::tcp::endpoint endpoint,
@@ -14,11 +14,7 @@ class Server {
     void start();
 
   private:
-    void do_accept();
-
-    asio::io_context &_io_context;
-    asio::ip::tcp::acceptor _acceptor;
-    Handler _handler;
-    std::unordered_map<SessionID, SessionPtr> _sessions;
+    std::unique_ptr<ServerImpl> _impl;
 };
+
 } // namespace pgwire
